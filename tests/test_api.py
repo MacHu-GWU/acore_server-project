@@ -5,6 +5,9 @@ from acore_server import api
 
 def test():
     _ = api
+    _ = api.Server
+    _ = api.Fleet
+    _ = api.InfraStackExports
 
 
 if __name__ == "__main__":

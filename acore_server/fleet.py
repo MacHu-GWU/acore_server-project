@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-
+todo: doc string
 """
 
 import typing as T
@@ -30,13 +30,18 @@ from .wserver_infra_exports import StackExports
 
 
 @dataclasses.dataclass
-class Server:
+class Server:  # pragma: no cover
     """
     A data container that holds both the config and metadata of a server.
 
+    Usage:
+
+    .. code-block:: python
+
+        >>> server = Server.get(bsm=..., server_id="sbx-blue", ...)
+
     :param config: See https://acore-server-config.readthedocs.io/en/latest/acore_server_config/config/define/server.html#acore_server_config.config.define.server.Server
-    :param metadata: See https://github.com/MacHu-GWU/acore_server_metadata-project/blob/main/acore_server_metadata/server.py
-    :param spec: See :class:`wserver_fleet_manager.config.define.server.Server`
+    :param metadata: See https://github.com/MacHu-GWU/acore_server_metadata-project/blob/main/acore_server_metadata/server/server.py
     """
 
     config: ServerConfig
@@ -100,8 +105,8 @@ class Server:
         return (
             "sudo -H -u ubuntu /home/ubuntu/.pyenv/shims/python3.8 -c "
             '"$(curl -fsSL https://raw.githubusercontent.com/MacHu-GWU/acore_server_bootstrap-project/main/install.py)" '
-            f"--acore_server_bootstrap_version {self.config.acore_server_bootstrap_version} "
-            f"--acore_soap_app_version {self.config.acore_soap_app_version}"
+            f"--acore_soap_app_version {self.config.acore_soap_app_version} "
+            f"--acore_server_bootstrap_version {self.config.acore_server_bootstrap_version}"
         )
 
     def run_ec2(
@@ -146,13 +151,22 @@ class Server:
             check_exists=False,
         )
 
-    def start_ec2(self, bsm: "BotoSesManager"):
+    def start_ec2(
+        self,
+        bsm: "BotoSesManager",
+    ):
         return self.metadata.start_ec2(ec2_client=bsm.ec2_client)
 
-    def start_rds(self, bsm: "BotoSesManager"):
+    def start_rds(
+        self,
+        bsm: "BotoSesManager",
+    ):
         return self.metadata.start_rds(rds_client=bsm.rds_client)
 
-    def associate_eip_address(self, bsm: "BotoSesManager") -> T.Optional[dict]:
+    def associate_eip_address(
+        self,
+        bsm: "BotoSesManager",
+    ) -> T.Optional[dict]:
         if self.config.ec2_eip_allocation_id is not None:
             return self.metadata.associate_eip_address(
                 ec2_client=bsm.ec2_client,
@@ -161,30 +175,48 @@ class Server:
             )
         return None
 
-    def update_db_master_password(self, bsm: "BotoSesManager") -> T.Optional[dict]:
+    def update_db_master_password(
+        self,
+        bsm: "BotoSesManager",
+    ) -> T.Optional[dict]:
         return self.metadata.update_db_master_password(
             rds_client=bsm.rds_client,
             master_password=self.config.db_admin_password,
             check_exists=False,
         )
 
-    def stop_ec2(self, bsm: "BotoSesManager"):
+    def stop_ec2(
+        self,
+        bsm: "BotoSesManager",
+    ):
         return self.metadata.stop_ec2(bsm.ec2_client)
 
-    def stop_rds(self, bsm: "BotoSesManager"):
+    def stop_rds(
+        self,
+        bsm: "BotoSesManager",
+    ):
         return self.metadata.stop_rds(bsm.rds_client)
 
-    def delete_ec2(self, bsm: "BotoSesManager"):
+    def delete_ec2(
+        self,
+        bsm: "BotoSesManager",
+    ):
         return self.metadata.delete_ec2(bsm.ec2_client)
 
-    def delete_rds(self, bsm: "BotoSesManager"):
+    def delete_rds(
+        self,
+        bsm: "BotoSesManager",
+    ):
         create_final_snapshot = self.env_name == EnvEnum.prd.value
         return self.metadata.delete_rds(
             bsm.rds_client,
             create_final_snapshot=create_final_snapshot,
         )
 
-    def bootstrap(self, bsm: "BotoSesManager"):
+    def bootstrap(
+        self,
+        bsm: "BotoSesManager",
+    ):
         """
         这个命令不会失败. 它只是一个 async API call.
         """
@@ -196,7 +228,10 @@ class Server:
             ],
         )
 
-    def run_server(self, bsm: "BotoSesManager"):
+    def run_server(
+        self,
+        bsm: "BotoSesManager",
+    ):
         """
         这个命令不会失败. 它只是一个 async API call.
         """
@@ -208,7 +243,10 @@ class Server:
             ],
         )
 
-    def stop_server(self, bsm: "BotoSesManager"):
+    def stop_server(
+        self,
+        bsm: "BotoSesManager",
+    ):
         """
         这个命令不会失败. 它只是一个 async API call.
         """
@@ -220,7 +258,10 @@ class Server:
             ],
         )
 
-    def count_online_player(self, bsm: "BotoSesManager") -> int:
+    def count_online_player(
+        self,
+        bsm: "BotoSesManager",
+    ) -> int:
         """
         这个命令能检测游戏服务器和数据库服务器连接是否正常. 如果无法获得这一信息, 我们则视
         服务器为不在线状态.
@@ -255,7 +296,7 @@ class Server:
         """
         acore_db_ssh_tunnel.list_ssh_tunnel(path_pem_file)
 
-    def test_ssh_tunnel(self):  # pragma: no cover
+    def test_ssh_tunnel(self):
         """
         通过运行一个简单的 SQL 语句来测试 SSH Tunnel 是否正常工作.
         """
@@ -269,7 +310,7 @@ class Server:
     def kill_ssh_tunnel(
         self,
         path_pem_file=default_path_pem_file,
-    ):  # pragma: no cover
+    ):
         """
         关闭所有正在运行中的 SSH Tunnel.
         """
@@ -277,17 +318,18 @@ class Server:
 
 
 @dataclasses.dataclass
-class Fleet:
+class Fleet:  # pragma: no cover
     """
     Fleet of server for a given environment.
 
-    It is just a dictionary
+    It is just a dictionary containing all servers' data. key is ``server_id``
+    value is the :class:`Server` object.
 
     Usage:
 
     .. code-block:: python
 
-        >>> fleet = Fleet.get(...)
+        >>> fleet = Fleet.get(bsm=..., env_name="sbx", ...)
         >>> server = fleet.get_server(server_id="sbx-blue")
     """
 

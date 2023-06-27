@@ -8,6 +8,7 @@ omit =
     acore_server/_version.py
     acore_server/cli.py
     acore_server/paths.py
+    acore_server/wserver_infra_exports.py
 
 [report]
 # Regexes for lines to exclude from consideration
