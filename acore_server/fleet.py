@@ -6,6 +6,7 @@ todo: doc string
 
 import typing as T
 import dataclasses
+from datetime import datetime, timezone
 
 from func_args import NOTHING, resolve_kwargs
 from boto_session_manager import BotoSesManager
@@ -13,6 +14,7 @@ from boto_session_manager import BotoSesManager
 from acore_paths.api import (
     path_acore_server_bootstrap_cli,
 )
+from acore_constants.api import TagKey
 from acore_server_metadata.api import Server as ServerMetadata
 from acore_server_config.api import (
     Server as ServerConfig,
@@ -20,7 +22,6 @@ from acore_server_config.api import (
     EnvEnum,
 )
 
-from acore_soap_app.api import canned
 from aws_ssm_run_command.api import better_boto as ssm_better_boto
 from acore_db_ssh_tunnel import api as acore_db_ssh_tunnel
 
@@ -39,6 +40,27 @@ class Server:  # pragma: no cover
     .. code-block:: python
 
         >>> server = Server.get(bsm=..., server_id="sbx-blue", ...)
+
+    Operate server methods:
+
+    - :meth:`~Server.run_ec2`
+    - :meth:`~Server.run_rds`
+    - :meth:`~Server.start_ec2`
+    - :meth:`~Server.start_rds`
+    - :meth:`~Server.associate_eip_address`
+    - :meth:`~Server.update_db_master_password`
+    - :meth:`~Server.stop_ec2`
+    - :meth:`~Server.stop_rds`
+    - :meth:`~Server.delete_ec2`
+    - :meth:`~Server.delete_rds`
+    - :meth:`~Server.bootstrap`
+    - :meth:`~Server.run_server`
+    - :meth:`~Server.stop_server`
+    - :meth:`~Server.count_online_player`
+    - :meth:`~Server.create_ssh_tunnel`
+    - :meth:`~Server.list_ssh_tunnel`
+    - :meth:`~Server.test_ssh_tunnel`
+    - :meth:`~Server.kill_ssh_tunnel`
 
     :param config: See https://acore-server-config.readthedocs.io/en/latest/acore_server_config/config/define/server.html#acore_server_config.config.define.server.Server
     :param metadata: See https://github.com/MacHu-GWU/acore_server_metadata-project/blob/main/acore_server_metadata/server/server.py
@@ -258,19 +280,34 @@ class Server:  # pragma: no cover
             ],
         )
 
-    def count_online_player(
-        self,
-        bsm: "BotoSesManager",
-    ) -> int:
+    @property
+    def wow_status(self) -> str:
         """
-        这个命令能检测游戏服务器和数据库服务器连接是否正常. 如果无法获得这一信息, 我们则视
-        服务器为不在线状态.
+        从 EC2 的 Tag 中获取魔兽世界服务器的状态.
+
+        1. 如果 EC2 或 RDS 任意一个不存在或是已被删除 则返回 "deleted".
+        2. 如果 EC2 或 RDS 不在线, 则返回 ``stopped``.
+        3. 如果 EC2 或 RDS 都在线, tag 中不存在测量数据, 则返回 "stopped"
+        4. 如果 EC2 或 RDS 都在线, tag 中有测量数据且没有过期, 则返回 tag 中的数据, 值可能是
+            "123 players" (数字是在线人数), 或是 "stopped"
+        5. 如果 EC2 或 RDS 都在线, tag 中有测量数据且过期了, 则返回 "stopped"
         """
-        return canned.get_online_players(
-            bsm,
-            server_id=self.id,
-            raises=True,
-        )["connected_players"]
+        if self.metadata.is_exists() is False:
+            return "deleted"
+        elif self.metadata.is_running() is False:
+            return "stopped"
+        elif TagKey.WOW_STATUS not in self.metadata.ec2_inst.tags:
+            return "stopped"
+        else:
+            wow_status = self.metadata.ec2_inst.tags[TagKey.WOW_STATUS]
+            measure_time = self.metadata.ec2_inst.tags[TagKey.WOW_STATUS_MEASURE_TIME]
+            measure_time = datetime.fromisoformat(measure_time)
+            utc_now = datetime.utcnow().replace(tzinfo=timezone.utc)
+            elapsed = (utc_now - measure_time).total_seconds()
+            if elapsed > 300:
+                return "stopped"
+            else:
+                return wow_status
 
     def create_ssh_tunnel(
         self,
@@ -279,6 +316,8 @@ class Server:  # pragma: no cover
         """
         创建一个本地的 SSH Tunnel, 用于本地数据库开发.
         """
+        if self.metadata.is_running() is False:
+            raise ConnectionError("cannot create ssh tunnel, EC2 or RDS is not running.")
         acore_db_ssh_tunnel.create_ssh_tunnel(
             path_pem_file=path_pem_file,
             db_host=self.metadata.rds_inst.endpoint,
@@ -300,6 +339,8 @@ class Server:  # pragma: no cover
         """
         通过运行一个简单的 SQL 语句来测试 SSH Tunnel 是否正常工作.
         """
+        if self.metadata.is_running() is False:
+            raise ConnectionError("cannot test ssh tunnel, EC2 or RDS is not running.")
         acore_db_ssh_tunnel.test_ssh_tunnel(
             db_port=DB_PORT,
             db_username=self.config.db_username,
