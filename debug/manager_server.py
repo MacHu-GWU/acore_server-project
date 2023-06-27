@@ -2,7 +2,7 @@
 
 from rich import print as rprint
 from boto_session_manager import BotoSesManager
-from acore_server.api import Fleet, WserverInfraStackExports
+from acore_server.api import Fleet, InfraStackExports
 
 server_id = "sbx-blue"
 env_name, server_name = server_id.split("-", 1)
@@ -19,7 +19,7 @@ rprint(f"is_ec2_running: {server.metadata.is_ec2_running()}")
 rprint(f"is_rds_running: {server.metadata.is_rds_running()}")
 
 
-stack_exports = WserverInfraStackExports(env_name=env_name)
+stack_exports = InfraStackExports(env_name=env_name)
 stack_exports.load(cf_client=bsm.cloudformation_client)
 
 # server.run_ec2(bsm=bsm, stack_exports=stack_exports)
@@ -31,6 +31,8 @@ stack_exports.load(cf_client=bsm.cloudformation_client)
 # server.associate_eip_address(bsm=bsm)
 # server.update_db_master_password(bsm=bsm)
 # server.bootstrap(bsm=bsm)
+
+# print(server.wow_status)
 
 # server.stop_ec2(bsm=bsm)
 # server.stop_rds(bsm=bsm)
