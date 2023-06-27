@@ -19,7 +19,7 @@ x.y.z (Backlog)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 **Features and Improvements**
 
-- Add ``acore_server.api.Server.from_ec2_insid``
+- Add ``acore_server.api.Server.from_ec2_inside``
 
 
 0.1.2 (2023-06-27)
