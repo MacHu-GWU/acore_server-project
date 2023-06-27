@@ -122,23 +122,47 @@ class Server:  # pragma: no cover
         """
         return self.id.split("-", 1)[1]
 
-    @property
-    def bootstrap_command(self) -> str:
-        return (
-            "sudo -H -u ubuntu /home/ubuntu/.pyenv/shims/python3.8 -c "
-            '"$(curl -fsSL https://raw.githubusercontent.com/MacHu-GWU/acore_server_bootstrap-project/main/install.py)" '
-            f"--acore_soap_app_version {self.config.acore_soap_app_version} "
-            f"--acore_server_bootstrap_version {self.config.acore_server_bootstrap_version}"
+    def build_bootstrap_command(
+        self,
+        python_version: str = "3.8",
+        acore_soap_app_version: T.Optional[str] = None,
+        acore_server_bootstrap_version: T.Optional[str] = None,
+    ) -> str:
+        cmd = (
+            f"sudo /home/ubuntu/.pyenv/shims/python{python_version} -c "
+            '"$(curl -fsSL https://raw.githubusercontent.com/MacHu-GWU/acore_server_bootstrap-project/main/install.py)"'
         )
+        if acore_soap_app_version:
+            cmd = (
+                cmd + f" --acore_soap_app_version {self.config.acore_soap_app_version}"
+            )
+        if acore_server_bootstrap_version:
+            cmd = (
+                cmd
+                + f" --acore_server_bootstrap_version {self.config.acore_server_bootstrap_version}"
+            )
+        return cmd
 
     def run_ec2(
         self,
         bsm: "BotoSesManager",
         stack_exports: "StackExports",
+        python_version: str = "3.8",
+        acore_soap_app_version: T.Optional[str] = None,
+        acore_server_bootstrap_version: T.Optional[str] = None,
     ):
+        """
+        为服务器创建一台新的 EC2. 注意, 一般先创建 RDS, 等 RDS 已经在运行了, 再创建 EC2.
+        因为 EC2 有一个 bootstrap 的过程, 这个过程中需要跟数据库通信.
+        """
+        bootstrap_command = self.build_bootstrap_command(
+            python_version=python_version,
+            acore_soap_app_version=acore_soap_app_version,
+            acore_server_bootstrap_version=acore_server_bootstrap_version,
+        )
         user_data_lines = [
             "#!/bin/bash",
-            self.bootstrap_command,
+            bootstrap_command,
         ]
         return self.metadata.run_ec2(
             ec2_client=bsm.ec2_client,
@@ -161,6 +185,9 @@ class Server:  # pragma: no cover
         bsm: "BotoSesManager",
         stack_exports: "StackExports",
     ):
+        """
+        为服务器创建一台新的数据库.
+        """
         return self.metadata.run_rds(
             rds_client=bsm.rds_client,
             db_snapshot_identifier=self.config.db_snapshot_id,
@@ -177,18 +204,27 @@ class Server:  # pragma: no cover
         self,
         bsm: "BotoSesManager",
     ):
+        """
+        启动关闭着的 EC2.
+        """
         return self.metadata.start_ec2(ec2_client=bsm.ec2_client)
 
     def start_rds(
         self,
         bsm: "BotoSesManager",
     ):
+        """
+        启动关闭着的 RDS.
+        """
         return self.metadata.start_rds(rds_client=bsm.rds_client)
 
     def associate_eip_address(
         self,
         bsm: "BotoSesManager",
     ) -> T.Optional[dict]:
+        """
+        给 EC2 关联 EIP.
+        """
         if self.config.ec2_eip_allocation_id is not None:
             return self.metadata.associate_eip_address(
                 ec2_client=bsm.ec2_client,
@@ -201,6 +237,9 @@ class Server:  # pragma: no cover
         self,
         bsm: "BotoSesManager",
     ) -> T.Optional[dict]:
+        """
+        更新数据库的 master password.
+        """
         return self.metadata.update_db_master_password(
             rds_client=bsm.rds_client,
             master_password=self.config.db_admin_password,
@@ -211,24 +250,36 @@ class Server:  # pragma: no cover
         self,
         bsm: "BotoSesManager",
     ):
+        """
+        关闭 EC2.
+        """
         return self.metadata.stop_ec2(bsm.ec2_client)
 
     def stop_rds(
         self,
         bsm: "BotoSesManager",
     ):
+        """
+        关闭 RDS.
+        """
         return self.metadata.stop_rds(bsm.rds_client)
 
     def delete_ec2(
         self,
         bsm: "BotoSesManager",
     ):
+        """
+        删除 EC2.
+        """
         return self.metadata.delete_ec2(bsm.ec2_client)
 
     def delete_rds(
         self,
         bsm: "BotoSesManager",
     ):
+        """
+        删除 RDS.
+        """
         create_final_snapshot = self.env_name == EnvEnum.prd.value
         return self.metadata.delete_rds(
             bsm.rds_client,
@@ -238,15 +289,59 @@ class Server:  # pragma: no cover
     def bootstrap(
         self,
         bsm: "BotoSesManager",
+        python_version: str = "3.8",
+        acore_soap_app_version: T.Optional[str] = None,
+        acore_server_bootstrap_version: T.Optional[str] = None,
     ):
         """
+        远程执行 EC2 引导程序.
+
+        这个命令不会失败. 它只是一个 async API call.
+        """
+        bootstrap_command = self.build_bootstrap_command(
+            python_version=python_version,
+            acore_soap_app_version=acore_soap_app_version,
+            acore_server_bootstrap_version=acore_server_bootstrap_version,
+        )
+        return ssm_better_boto.send_command(
+            ssm_client=bsm.ssm_client,
+            instance_id=self.metadata.ec2_inst.id,
+            commands=[
+                bootstrap_command,
+            ],
+        )
+
+    def run_check_server_status_cron_job(
+        self,
+        bsm: "BotoSesManager",
+    ):
+        """
+        启动检测游戏服务器状态的定时任务.
+
         这个命令不会失败. 它只是一个 async API call.
         """
         return ssm_better_boto.send_command(
             ssm_client=bsm.ssm_client,
             instance_id=self.metadata.ec2_inst.id,
             commands=[
-                self.bootstrap_command,
+                f"sudo -H -u ubuntu {path_acore_server_bootstrap_cli} run_check_server_status_cron_job",
+            ],
+        )
+
+    def stop_check_server_status_cron_job(
+        self,
+        bsm: "BotoSesManager",
+    ):
+        """
+        停止检测游戏服务器状态的定时任务.
+
+        这个命令不会失败. 它只是一个 async API call.
+        """
+        return ssm_better_boto.send_command(
+            ssm_client=bsm.ssm_client,
+            instance_id=self.metadata.ec2_inst.id,
+            commands=[
+                f"sudo -H -u ubuntu {path_acore_server_bootstrap_cli} stop_check_server_status_cron_job",
             ],
         )
 
@@ -255,13 +350,15 @@ class Server:  # pragma: no cover
         bsm: "BotoSesManager",
     ):
         """
+        启动魔兽世界游戏服务器.
+
         这个命令不会失败. 它只是一个 async API call.
         """
         return ssm_better_boto.send_command(
             ssm_client=bsm.ssm_client,
             instance_id=self.metadata.ec2_inst.id,
             commands=[
-                f"{path_acore_server_bootstrap_cli} run_server",
+                f"sudo -H -u ubuntu {path_acore_server_bootstrap_cli} run_server",
             ],
         )
 
@@ -270,13 +367,15 @@ class Server:  # pragma: no cover
         bsm: "BotoSesManager",
     ):
         """
+        停止魔兽世界游戏服务器.
+
         这个命令不会失败. 它只是一个 async API call.
         """
         return ssm_better_boto.send_command(
             ssm_client=bsm.ssm_client,
             instance_id=self.metadata.ec2_inst.id,
             commands=[
-                f"{path_acore_server_bootstrap_cli} stop_server",
+                f"sudo -H -u ubuntu {path_acore_server_bootstrap_cli} stop_server",
             ],
         )
 
@@ -317,7 +416,9 @@ class Server:  # pragma: no cover
         创建一个本地的 SSH Tunnel, 用于本地数据库开发.
         """
         if self.metadata.is_running() is False:
-            raise ConnectionError("cannot create ssh tunnel, EC2 or RDS is not running.")
+            raise ConnectionError(
+                "cannot create ssh tunnel, EC2 or RDS is not running."
+            )
         acore_db_ssh_tunnel.create_ssh_tunnel(
             path_pem_file=path_pem_file,
             db_host=self.metadata.rds_inst.endpoint,
