@@ -13,7 +13,6 @@ def test():
     _ = api.Server.id
     _ = api.Server.env_name
     _ = api.Server.server_name
-    _ = api.Server.bootstrap_command
     _ = api.Server.run_ec2
     _ = api.Server.run_rds
     _ = api.Server.start_ec2
@@ -25,6 +24,7 @@ def test():
     _ = api.Server.delete_ec2
     _ = api.Server.delete_rds
     _ = api.Server.bootstrap
+    _ = api.Server.run_check_server_status_cron_job
     _ = api.Server.run_server
     _ = api.Server.stop_server
     _ = api.Server.wow_status
