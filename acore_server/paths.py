@@ -20,3 +20,10 @@ bin_pytest = dir_venv_bin / "pytest"
 dir_htmlcov = dir_project_root / "htmlcov"
 path_cov_index_html = dir_htmlcov / "index.html"
 dir_unit_test = dir_project_root / "tests"
+
+# ------------------------------------------------------------------------------
+# wserver_fleet_manager Related
+# ------------------------------------------------------------------------------
+path_pem_file = Path.home().joinpath(
+    "ec2-pem", "bmt-app-dev", "us-east-1", "sanhe-dev.pem"
+)
