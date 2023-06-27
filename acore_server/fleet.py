@@ -15,9 +15,12 @@ from acore_paths.api import (
     path_acore_server_bootstrap_cli,
 )
 from acore_constants.api import TagKey
-from acore_server_metadata.api import Server as ServerMetadata
+from acore_server_metadata.api import (
+    Server as ServerMetadata,
+)
 from acore_server_config.api import (
     Server as ServerConfig,
+    Ec2ConfigLoader,
     ConfigLoader,
     EnvEnum,
 )
@@ -39,7 +42,10 @@ class Server:  # pragma: no cover
 
     .. code-block:: python
 
+        # if you are on develop's laptop or lambda
         >>> server = Server.get(bsm=..., server_id="sbx-blue", ...)
+        # if you are on game server EC2
+        >>> server = Server.from_ec2_inside()
 
     Operate server methods:
 
@@ -76,7 +82,10 @@ class Server:  # pragma: no cover
         server_id: str,
         parameter_name_prefix: T.Optional[str] = NOTHING,
         s3folder_config: T.Optional[str] = NOTHING,
-    ) -> "Server":
+    ):
+        """
+        指定一个 server_id, 读取它的 config 和 metadata, 然后返回一个 Server 对象.
+        """
         env_name, server_name = server_id.split("-", 1)
         # get acore_server_config
         config_loader = ConfigLoader.new(
@@ -95,7 +104,22 @@ class Server:  # pragma: no cover
             rds_client=bsm.rds_client,
         )
         # put them together
-        server = Server(
+        server = cls(
+            config=server_config,
+            metadata=server_metadata,
+        )
+        return server
+
+    @classmethod
+    def from_ec2_inside(cls):
+        """
+        用 "自省" 的方式从 EC2 instance 里面读取 server_id, 读取 config 和 metadata,
+        然后返回一个 Server 对象.
+        """
+        server_metadata = ServerMetadata.from_ec2_inside()
+        server_config = Ec2ConfigLoader.load(server_id=server_metadata.id)
+        # put them together
+        server = cls(
             config=server_config,
             metadata=server_metadata,
         )
@@ -484,7 +508,7 @@ class Fleet:  # pragma: no cover
         env_name: str,
         parameter_name_prefix: T.Optional[str] = NOTHING,
         s3folder_config: T.Optional[str] = NOTHING,
-    ) -> "Fleet":
+    ):
         """
         Load all servers' data for a given environment efficiently.
         """
@@ -522,4 +546,7 @@ class Fleet:  # pragma: no cover
         return fleet
 
     def get_server(self, server_id: str) -> Server:
+        """
+        Get a server by its id.
+        """
         return self.servers[server_id]
