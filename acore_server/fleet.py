@@ -150,6 +150,7 @@ class Server:  # pragma: no cover
         self,
         python_version: str = "3.8",
         acore_soap_app_version: T.Optional[str] = None,
+        acore_db_app_version: T.Optional[str] = None,
         acore_server_bootstrap_version: T.Optional[str] = None,
     ) -> str:
         cmd = (
@@ -159,6 +160,10 @@ class Server:  # pragma: no cover
         if acore_soap_app_version:
             cmd = (
                 cmd + f" --acore_soap_app_version {self.config.acore_soap_app_version}"
+            )
+        if acore_db_app_version:
+            cmd = (
+                cmd + f" --acore_db_app_version {self.config.acore_db_app_version}"
             )
         if acore_server_bootstrap_version:
             cmd = (
@@ -315,6 +320,7 @@ class Server:  # pragma: no cover
         bsm: "BotoSesManager",
         python_version: str = "3.8",
         acore_soap_app_version: T.Optional[str] = None,
+        acore_db_app_version: T.Optional[str] = None,
         acore_server_bootstrap_version: T.Optional[str] = None,
     ):
         """
@@ -325,6 +331,7 @@ class Server:  # pragma: no cover
         bootstrap_command = self.build_bootstrap_command(
             python_version=python_version,
             acore_soap_app_version=acore_soap_app_version,
+            acore_db_app_version=acore_db_app_version,
             acore_server_bootstrap_version=acore_server_bootstrap_version,
         )
         return ssm_better_boto.send_command(
