@@ -19,7 +19,7 @@ x.y.z (Backlog)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 **Miscellaneous**
 
-- Upgrade ``acore_server_config`` dependency from 0.5.2 to 0.6.1.
+- Upgrade ``acore_server_config`` dependency from 0.4.2 to 0.5.1.
 
 
 0.2.3 (2023-06-28)
