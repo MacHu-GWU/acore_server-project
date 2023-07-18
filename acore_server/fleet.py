@@ -178,6 +178,7 @@ class Server:  # pragma: no cover
         stack_exports: "StackExports",
         python_version: str = "3.8",
         acore_soap_app_version: T.Optional[str] = None,
+        acore_db_app_version: T.Optional[str] = None,
         acore_server_bootstrap_version: T.Optional[str] = None,
     ):
         """
@@ -187,6 +188,7 @@ class Server:  # pragma: no cover
         bootstrap_command = self.build_bootstrap_command(
             python_version=python_version,
             acore_soap_app_version=acore_soap_app_version,
+            acore_db_app_version=acore_db_app_version,
             acore_server_bootstrap_version=acore_server_bootstrap_version,
         )
         user_data_lines = [
