@@ -22,6 +22,7 @@ rprint(f"is_rds_running: {server.metadata.is_rds_running()}")
 stack_exports = InfraStackExports(env_name=env_name)
 stack_exports.load(cf_client=bsm.cloudformation_client)
 
+# server.run_rds(bsm=bsm, stack_exports=stack_exports)
 # server.run_ec2(
 #     bsm=bsm,
 #     stack_exports=stack_exports,
@@ -29,7 +30,6 @@ stack_exports.load(cf_client=bsm.cloudformation_client)
 #     acore_db_app_version="0.2.2",
 #     acore_server_bootstrap_version="0.4.1",
 # )
-server.run_rds(bsm=bsm, stack_exports=stack_exports)
 
 # server.start_ec2(bsm=bsm)
 # server.start_rds(bsm=bsm)
