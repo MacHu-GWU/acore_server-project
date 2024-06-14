@@ -4,7 +4,7 @@ from rich import print as rprint
 from boto_session_manager import BotoSesManager
 from acore_server.api import Fleet, InfraStackExports
 
-server_id = "sbx-blue"
+server_id = "sbx-green"
 env_name, server_name = server_id.split("-", 1)
 bsm = BotoSesManager(profile_name="bmt_app_dev_us_east_1")
 fleet = Fleet.get(bsm=bsm, env_name=env_name)
