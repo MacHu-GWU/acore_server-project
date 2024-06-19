@@ -5,7 +5,6 @@ todo: doc string
 """
 
 import typing as T
-import json
 from datetime import datetime, timezone
 
 from boto_session_manager import BotoSesManager
@@ -21,20 +20,16 @@ from .vendor.hashes import hashes
 
 from .paths import path_pem_file as default_path_pem_file
 from .constants import EC2_USERNAME, DB_PORT
-from .exc import FailedToStartServerError, FailedToStopServerError
 from .wserver_infra_exports import StackExports
 from .logger import logger
-
-
-def get_utc_now() -> datetime:
-    return datetime.utcnow().replace(tzinfo=timezone.utc)
+from .utils import get_utc_now
 
 
 if T.TYPE_CHECKING:  # pragma: no cover
     from .server import Server
     from mypy_boto3_ec2.type_defs import (
         CreateImageResultTypeDef,
-        RunInstancesResultTypeDef,
+        ReservationResponseTypeDef,
         StartInstancesResultTypeDef,
         StopInstancesResultTypeDef,
         TerminateInstancesResultTypeDef,
@@ -128,7 +123,7 @@ class ServerOperationMixin:  # pragma: no cover
         check: bool = True,
         wait: bool = True,
         **kwargs,
-    ) -> "RunInstancesResultTypeDef":
+    ) -> "ReservationResponseTypeDef":
         """
         为服务器创建一台新的 EC2. 注意, 一般先创建 RDS, 等 RDS 已经在运行了, 再创建 EC2.
         因为 EC2 有一个 bootstrap 的过程, 这个过程中需要跟数据库通信.
@@ -441,7 +436,7 @@ class ServerOperationMixin:  # pragma: no cover
         return res
 
     @logger.emoji_block(
-        msg="⚫🖥Stop EC2 instance",
+        msg="🗑🖥Stop EC2 instance",
         emoji="🖥",
     )
     def delete_ec2(
@@ -459,7 +454,7 @@ class ServerOperationMixin:  # pragma: no cover
         return res
 
     @logger.emoji_block(
-        msg="⚫🛢Stop EC2 instance",
+        msg="🗑🛢Delete EC2 instance",
         emoji="🛢",
     )
     def delete_rds(
@@ -667,7 +662,7 @@ class ServerOperationMixin:  # pragma: no cover
         acore_db_ssh_tunnel.kill_ssh_tunnel(path_pem_file)
 
     @logger.emoji_block(
-        msg="🆕🖥️📸Create new EC2 AMI",
+        msg="🆕🖥📸Create new EC2 AMI",
         emoji="📸",
     )
     def create_ec2_ami(
@@ -688,6 +683,9 @@ class ServerOperationMixin:  # pragma: no cover
             ec2_inst = self.ensure_ec2_exists(bsm=bsm)
         else:
             ec2_inst = self.metadata.ec2_inst
+        logger.info(
+            f"create image {ami_name!r} from ec2 instance {self.metadata.ec2_inst.id}"
+        )
         res = bsm.ec2_client.create_image(
             InstanceId=self.metadata.ec2_inst.id,
             Name=ami_name,
@@ -695,10 +693,7 @@ class ServerOperationMixin:  # pragma: no cover
             TagSpecifications=[
                 {
                     "ResourceType": "image",
-                    "Tags": [
-                        {"Key": k, "Value": v}
-                        for k, v in ec2_inst.tags.items()
-                    ]
+                    "Tags": [{"Key": k, "Value": v} for k, v in ec2_inst.tags.items()],
                 }
             ],
         )
@@ -706,10 +701,12 @@ class ServerOperationMixin:  # pragma: no cover
         if wait:
             image = simple_aws_ec2.Image(id=ami_id)
             image.wait_for_available(ec2_client=bsm.ec2_client)
+        else:
+            logger.info("skip waiting for available")
         return res
 
     @logger.emoji_block(
-        msg="🆕🛢️📸Create new DB Snapshot",
+        msg="🆕🛢📸Create new DB Snapshot",
         emoji="📸",
     )
     def create_db_snapshot(
@@ -722,12 +719,19 @@ class ServerOperationMixin:  # pragma: no cover
         if snapshot_id is None:
             snapshot_id = self._get_db_snapshot_id()
         if check:
-            self.ensure_rds_exists(bsm=bsm)
+            rds_inst = self.ensure_rds_exists(bsm=bsm)
+        else:
+            rds_inst = self.metadata.rds_inst
+        logger.info(
+            f"create db snapshot {snapshot_id!r} from db instance {rds_inst.id}"
+        )
         res = bsm.rds_client.create_db_snapshot(
             DBSnapshotIdentifier=snapshot_id,
-            DBInstanceIdentifier=self.metadata.rds_inst.id,
+            DBInstanceIdentifier=rds_inst.id,
         )
         if wait:
             snap = simple_aws_rds.RDSDBSnapshot(db_snapshot_identifier=snapshot_id)
             snap.wait_for_available(rds_client=bsm.rds_client)
+        else:
+            logger.info("skip waiting for available")
         return res
