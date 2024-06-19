@@ -105,17 +105,13 @@ class CreateClonedServerWorkflow(Workflow):
 class DeleteServerWorkflow(Workflow):
     ec2_ami_id: T.Optional[str] = dataclasses.field(default=None)
     db_snapshot_id: T.Optional[str] = dataclasses.field(default=None)
+    is_ec2_ami_available: bool = dataclasses.field(default=False)
+    is_db_snapshot_available: bool = dataclasses.field(default=False)
     is_ec2_deleted: bool = dataclasses.field(default=False)
     is_db_deleted: bool = dataclasses.field(default=False)
 
     def is_fresh_start(self):
         return (self.ec2_ami_id is None) and (self.db_snapshot_id is None)
-
-    def is_ec2_ami_created(self) -> bool:
-        return self.ec2_ami_id is not None
-
-    def is_db_snapshot_created(self) -> bool:
-        return self.db_snapshot_id is not None
 
     def is_ec2_ami_created(self) -> bool:
         return self.ec2_ami_id is not None
@@ -194,6 +190,8 @@ class ServerWorkflowMixin:  # pragma: no cover
             logger.info(f"🆕🖥📸Created EC2 AMI {ami_id!r}, preview at {url}")
             workflow.ec2_ami_id = ami_id
             workflow.dump(bsm=bsm, s3_path=s3path_workflow)
+        else:
+            logger.info("Skip creating EC2 AMI, AMI is already created.")
 
         if workflow.is_db_snapshot_created() is False:
             with logger.nested():
@@ -206,38 +204,45 @@ class ServerWorkflowMixin:  # pragma: no cover
             logger.info(f"🆕🛢📸Created DB Snapshot {snapshot_id!r}, preview at {url}")
             workflow.db_snapshot_id = snapshot_id
             workflow.dump(bsm=bsm, s3_path=s3path_workflow)
+        else:
+            logger.info("Skip creating DB snapshot, snapshot is already created.")
 
         # --- create RDS
         if workflow.is_db_instance_created() is False:
             logger.info("wait for DB Snapshot to be available ...")
-            snapshot = simple_aws_rds.RDSDBSnapshot(db_snapshot_identifier=snapshot_id)
+            snapshot = simple_aws_rds.RDSDBSnapshot(
+                db_snapshot_identifier=workflow.db_snapshot_id
+            )
             snapshot.wait_for_available(rds_client=bsm.rds_client)
 
             with logger.nested():
                 res = new_server.create_rds_from_snapshot(
                     bsm=bsm,
                     stack_exports=stack_exports,
-                    db_snapshot_id=snapshot_id,
+                    db_snapshot_id=workflow.db_snapshot_id,
                     check=True,
                     wait=True,
                 )
                 db_inst_id = res["DBInstance"]["DBInstanceIdentifier"]
+
             url = aws_console.rds.get_database_instance(db_inst_id)
             logger.info(f"🆕🛢Created DB Instance {db_inst_id!r}, preview at {url}")
             workflow.db_inst_id = db_inst_id
             workflow.dump(bsm=bsm, s3_path=s3path_workflow)
+        else:
+            logger.info("Skip creating DB instance, DB is already created.")
 
         # --- create EC2
         if workflow.is_ec2_instance_created() is False:
             logger.info("wait for EC2 AMI to be available ...")
-            image = simple_aws_ec2.Image(id=ami_id)
+            image = simple_aws_ec2.Image(id=workflow.ec2_ami_id)
             image.wait_for_available(ec2_client=bsm.ec2_client)
 
             with logger.nested():
                 res = new_server.create_ec2(
                     bsm=bsm,
                     stack_exports=stack_exports,
-                    ami_id=ami_id,
+                    ami_id=workflow.ec2_ami_id,
                     check=True,
                     wait=True,
                 )
@@ -246,10 +251,13 @@ class ServerWorkflowMixin:  # pragma: no cover
             logger.info(f"🆕🖥Created EC2 instance {ec2_inst_id!r}, preview at {url}")
             workflow.ec2_inst_id = ec2_inst_id
             workflow.dump(bsm=bsm, s3_path=s3path_workflow)
+        else:
+            logger.info("Skip creating EC2 instance, EC2 is already created.")
 
         if delete_ami_afterwards:
             if workflow.is_ec2_ami_deleted is False:
                 logger.info("Delete AMI ...")
+                image = simple_aws_ec2.Image(id=workflow.ec2_ami_id)
                 image.deregister(
                     ec2_client=bsm.ec2_client,
                     delete_snapshot=True,  # also delete the snapshot
@@ -258,27 +266,24 @@ class ServerWorkflowMixin:  # pragma: no cover
                 logger.info("✅Done")
                 workflow.is_ec2_ami_deleted = True
                 workflow.dump(bsm=bsm, s3_path=s3path_workflow)
+            else:
+                logger.info("Skip delete EC2 AMI, AMI is already deleted.")
+        else:
+            logger.info("We don't delete temp EC2 AMI afterward.")
 
         if delete_snapshot_afterwards:
             if workflow.is_db_snapshot_deleted is False:
                 logger.info("Delete Snapshot ...")
                 bsm.rds_client.delete_db_snapshot(
-                    DBSnapshotIdentifier=snapshot_id,
+                    DBSnapshotIdentifier=workflow.db_snapshot_id,
                 )
                 logger.info("✅Done")
                 workflow.is_db_snapshot_deleted = True
                 workflow.dump(bsm=bsm, s3_path=s3path_workflow)
-
-    # def ensure_server_is_ready_for_clone(
-    #     self: "Server",
-    #     bsm: "BotoSesManager",
-    # ) -> T.Tuple[simple_aws_ec2.Ec2Instance, simple_aws_rds.RDSDBInstance]:
-    #     ec2_inst = self.ensure_rds_exists(bsm=bsm)
-    #     if self.metadata.is_rds_running() is False:
-    #         raise FailedToStartServerError(
-    #             f"RDS DB instance {self.id!r} is not running, so we cannot create DB snapshot then clone the server!"
-    #         )
-    #     return ec2_inst, self.metadata.rds_inst
+            else:
+                logger.info("Skip delete DB snapshot, snapshot is already deleted.")
+        else:
+            logger.info("We don't delete temp DB snapshot afterward.")
 
     @logger.emoji_block(
         msg="🗑🖥🛢Delete Server",
@@ -289,7 +294,6 @@ class ServerWorkflowMixin:  # pragma: no cover
         bsm: "BotoSesManager",
         workflow_id: str,
         s3path_workflow: S3Path,
-        stack_exports: "StackExports",
         skip_reboot: bool = False,
         create_backup_ec2_ami: bool = True,
         create_backup_db_snapshot: bool = True,
@@ -302,7 +306,7 @@ class ServerWorkflowMixin:  # pragma: no cover
         logger.info(f"Delete {self.id!r}")
         if skip_prompt is False:
             prompt_for_confirm(
-                msg=(f"💥Are you sure you want to DELETE **Server {self.id!r}**?")
+                msg=(f"💥Are you sure you want to DELETE server {self.id!r}?")
             )
 
         # --- create AMI and DB Snapshot
@@ -321,9 +325,13 @@ class ServerWorkflowMixin:  # pragma: no cover
                     )
                     ami_id = res["ImageId"]
                 url = aws_console.ec2.get_ami(ami_id)
-                logger.info(f"Created EC2 AMI {ami_id!r}, preview at {url}")
+                logger.info(f"🗑🖥📸Created EC2 AMI {ami_id!r}, preview at {url}")
                 workflow.ec2_ami_id = ami_id
                 workflow.dump(bsm=bsm, s3_path=s3path_workflow)
+            else:
+                logger.info("Skip creating EC2 AMI, AMI is already created.")
+        else:
+            logger.info("We don't creating final EC2 AMI backup.")
 
         if create_backup_db_snapshot:
             if workflow.is_db_snapshot_created() is False:
@@ -337,47 +345,67 @@ class ServerWorkflowMixin:  # pragma: no cover
                     )
                     snapshot_id = res["DBSnapshot"]["DBSnapshotIdentifier"]
                 url = aws_console.rds.get_snapshot(snapshot_id)
-                logger.info(f"Created DB Snapshot {snapshot_id!r}, preview at {url}")
+                logger.info(
+                    f"🗑🛢📸Created DB Snapshot {snapshot_id!r}, preview at {url}"
+                )
                 workflow.db_snapshot_id = snapshot_id
                 workflow.dump(bsm=bsm, s3_path=s3path_workflow)
+            else:
+                logger.info("Skip creating DB snapshot, snapshot is already created.")
+        else:
+            logger.info("We don't creating final DB snapshot backup.")
 
         if create_backup_ec2_ami:
-            logger.info("wait for EC2 AMI to be available ...")
-            image = simple_aws_ec2.Image(id=ami_id)
-            image.wait_for_available(ec2_client=bsm.ec2_client)
+            if workflow.is_ec2_ami_available is False:
+                logger.info("wait for EC2 AMI to be available ...")
+                image = simple_aws_ec2.Image(id=workflow.ec2_ami_id)
+                image.wait_for_available(ec2_client=bsm.ec2_client)
+                workflow.is_ec2_ami_available = True
+                workflow.dump(bsm=bsm, s3_path=s3path_workflow)
 
         if create_backup_db_snapshot:
-            logger.info("wait for DB Snapshot to be available ...")
-            snapshot = simple_aws_rds.RDSDBSnapshot(db_snapshot_identifier=snapshot_id)
-            snapshot.wait_for_available(rds_client=bsm.rds_client)
+            if workflow.is_db_snapshot_available is False:
+                logger.info("wait for DB Snapshot to be available ...")
+                snapshot = simple_aws_rds.RDSDBSnapshot(
+                    db_snapshot_identifier=workflow.db_snapshot_id
+                )
+                snapshot.wait_for_available(rds_client=bsm.rds_client)
+                workflow.is_db_snapshot_available = True
+                workflow.dump(bsm=bsm, s3_path=s3path_workflow)
 
         # --- delete EC2
         if workflow.is_ec2_deleted is False:
-            with logger.nested():
-                if self.metadata.is_ec2_exists():
+            if self.metadata.is_ec2_exists():
+                with logger.nested():
                     res = self.delete_ec2(
                         bsm=bsm,
                         check=False,
                     )
                     ec2_inst_id = self.metadata.ec2_inst.id
                     url = aws_console.ec2.get_instance(ec2_inst_id)
-                    logger.info(f"Delete EC2 instance {ec2_inst_id!r}, verify at {url}")
-                    workflow.is_ec2_deleted = True
-                    workflow.dump(bsm=bsm, s3_path=s3path_workflow)
+                logger.info(f"🗑🖥Delete EC2 instance {ec2_inst_id!r}, verify at {url}")
+            else:
+                logger.info("Skip terminate EC2 instance, EC2 is already terminated.")
+            workflow.is_ec2_deleted = True
+            workflow.dump(bsm=bsm, s3_path=s3path_workflow)
+        else:
+            logger.info("Skip terminate EC2 instance, EC2 is already terminated.")
 
         # --- delete RDS
         if workflow.is_db_deleted is False:
-            with logger.nested():
-                if self.metadata.is_rds_exists():
+            if self.metadata.is_rds_exists():
+                with logger.nested():
                     res = self.delete_rds(
                         bsm=bsm,
-                        stack_exports=stack_exports,
-                        db_snapshot_id=snapshot_id,
-                        check=True,
-                        wait=True,
+                        create_final_snapshot=False,
+                        check=False,
                     )
                     db_inst_id = self.metadata.rds_inst.id
                     url = aws_console.rds.get_database_instance(db_inst_id)
-                    logger.info(f"Created DB Instance {db_inst_id!r}, preview at {url}")
-                    workflow.is_db_deleted = True
-                    workflow.dump(bsm=bsm, s3_path=s3path_workflow)
+                logger.info(f"🗑🛢Delete DB Instance {db_inst_id!r}, verify at {url}")
+            else:
+                logger.info("Skip delete DB instance, DB is already deleted.")
+            workflow.is_db_deleted = True
+            workflow.dump(bsm=bsm, s3_path=s3path_workflow)
+        else:
+            logger.info("Skip delete DB instance, DB is already deleted.")

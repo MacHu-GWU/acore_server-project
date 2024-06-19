@@ -128,8 +128,31 @@ Workflow 5 - Start Server
 
 .. admonition:: 步骤
 
-    - 检查这个游戏服务器是否已经存在. 只有已经存在并处于停机状态的服务器彩可以被启动.
+    - 检查这个游戏服务器是否已经存在. 只有已经存在并处于停机状态的服务器才可以被启动.
     - 检查这个游戏服务器的配置是否已经存在, 并且通过了 validation.
     - 用 AWS SSM Run Command 远程 `关闭 screen session <https://github.com/MacHu-GWU/acore_server_bootstrap-project/blob/main/acore_server_bootstrap/vendor/screen_session_manager.py#L60>`_ 来关闭 worldserver 和 authserver.
     - 再关闭 EC2 Instance.
     - 再关闭 DB Instance.
+
+
+.. _delete-server:
+
+Workflow 6 - Delete Server
+------------------------------------------------------------------------------
+.. admonition:: 目标
+    :class: note
+
+    彻底删除一个游戏服务器以及对应的数据库.
+
+.. admonition:: 使用场景
+    :class: tip
+
+    通常在临时的开发服务器上完成了开发和测试之后, 已经保存了代码和数据, 就可以删除这个服务器了.
+
+.. admonition:: 步骤
+
+    - 检查这个游戏服务器是否已经存在. 只有已经存在才可以被删除.
+    - (optional) 为 EC2 创建一个 AMI 备份, 并等待 AMI 的状态变成 available.
+    - (optional) 为 RDS 创建一个 Snapshot 备份, 并等待 Snapshot 的状态变成 available.
+    - 彻底删除 (Terminate) EC2 Instance.
+    - 删除 DB Instance.
