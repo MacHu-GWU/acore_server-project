@@ -1,3 +1,5 @@
+.. _operation-and-workflow:
+
 Operation and Workflow
 ==============================================================================
 
@@ -61,6 +63,10 @@ Workflow 2 - Create Cloned Server
     - 等待 DB Instance 状态变成 available.
     - 使用指定的 AMI 创建新的 EC2 Instance, 并使用 bootstrap 脚本初始化.
     - 等待 EC2 Instance 的状态变成 running, 并且游戏服务器启动成功.
+
+.. seealso::
+
+    :meth:`~acore_server.server_workflow_mixin.ServerWorkflowMixin.create_cloned_server` 方法的实现.
 
 
 .. _create-updated-server:
@@ -156,3 +162,7 @@ Workflow 6 - Delete Server
     - (optional) 为 RDS 创建一个 Snapshot 备份, 并等待 Snapshot 的状态变成 available.
     - 彻底删除 (Terminate) EC2 Instance.
     - 删除 DB Instance.
+
+.. seealso::
+
+    :meth:`~acore_server.server_workflow_mixin.ServerWorkflowMixin.delete_server` 方法的实现.
