@@ -27,12 +27,14 @@ from .exc import (
 )
 from .server_operation_mixin import ServerOperationMixin
 from .server_workflow_mixin import ServerWorkflowMixin
+from .server_helper_mixin import ServerHelperMixin
 
 
 @dataclasses.dataclass
 class Server(
     ServerOperationMixin,
     ServerWorkflowMixin,
+    ServerHelperMixin,
 ):  # pragma: no cover
     """
     A data container that holds both the config and metadata of a server.

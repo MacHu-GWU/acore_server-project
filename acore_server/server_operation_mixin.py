@@ -98,11 +98,15 @@ class ServerOperationMixin:  # pragma: no cover
         )
         parts = [main_part]
         if acore_soap_app_version:
-            parts.append(f"--acore_soap_app_version {self.config.acore_soap_app_version}")
+            parts.append(
+                f"--acore_soap_app_version {self.config.acore_soap_app_version}"
+            )
         if acore_db_app_version:
             parts.append(f"--acore_db_app_version {self.config.acore_db_app_version}")
         if acore_server_bootstrap_version:
-            parts.append(f"--acore_server_bootstrap_version {self.config.acore_server_bootstrap_version}")
+            parts.append(
+                f"--acore_server_bootstrap_version {self.config.acore_server_bootstrap_version}"
+            )
         cmd = " ".join(parts)
         return cmd
 
@@ -366,33 +370,82 @@ class ServerOperationMixin:  # pragma: no cover
             rds_inst.wait_for_available(rds_client=bsm.rds_client, timeout=600)
         return res
 
+    @logger.emoji_block(
+        msg="Associate EIP Address",
+        emoji="🖥",
+    )
     def associate_eip_address(
         self: "Server",
         bsm: "BotoSesManager",
+        allow_reassociation: bool = False,
+        check: bool = True,
     ) -> T.Optional[dict]:
         """
         给 EC2 关联 EIP.
         """
         if self.config.ec2_eip_allocation_id is not None:
-            return self.metadata.associate_eip_address(
-                ec2_client=bsm.ec2_client,
-                allocation_id=self.config.ec2_eip_allocation_id,
-                check_exists=True,
+            if check:
+                ec2_inst = self.ensure_ec2_exists(bsm=bsm)
+            else:
+                ec2_inst = self.metadata.ec2_inst
+            # check if this allocation id is already associated with an instance
+            res = bsm.ec2_client.describe_addresses(
+                AllocationIds=[self.config.ec2_eip_allocation_id]
+            )
+            address_data = res["Addresses"][0]
+            instance_id = address_data.get("InstanceId", "invalid-instance-id")
+            if instance_id == ec2_inst.id:  # already associated
+                return None
+
+            # associate eip address
+            return bsm.ec2_client.associate_address(
+                AllocationId=self.config.ec2_eip_allocation_id,
+                InstanceId=ec2_inst.id,
+                AllowReassociation=allow_reassociation,
             )
         return None
 
+    @logger.emoji_block(
+        msg="Update db master password",
+        emoji="🛢",
+    )
     def update_db_master_password(
         self: "Server",
         bsm: "BotoSesManager",
+        check: bool = True,
     ) -> T.Optional[dict]:
         """
         更新数据库的 master password.
         """
-        return self.metadata.update_db_master_password(
-            rds_client=bsm.rds_client,
-            master_password=self.config.db_admin_password,
-            check_exists=False,
+        if check:
+            rds_inst = self.ensure_rds_exists(bsm=bsm)
+        else:
+            rds_inst = self.metadata.rds_inst
+
+        master_password = self.config.db_admin_password
+        hashes.use_sha256()
+        master_password_digest = hashes.of_str(master_password, hexdigest=True)
+        if (
+            rds_inst.tags.get("tech:master_password_digest", "invalid")
+            == master_password_digest
+        ):
+            # do nothing
+            return None
+
+        response = bsm.rds_client.modify_db_instance(
+            DBInstanceIdentifier=rds_inst.id,
+            MasterUserPassword=master_password,
+            ApplyImmediately=True,
         )
+
+        bsm.rds_client.add_tags_to_resource(
+            ResourceName=rds_inst.db_instance_arn,
+            Tags=[
+                dict(Key="tech:master_password_digest", Value=master_password_digest)
+            ],
+        )
+
+        return response
 
     @logger.emoji_block(
         msg="🔴🖥Stop EC2 instance",
@@ -517,6 +570,10 @@ class ServerOperationMixin:  # pragma: no cover
             instance_ids=self.metadata.ec2_inst.id,
         )
 
+    @logger.emoji_block(
+        msg="Run Check Server Status Cron Job",
+        emoji="🖥",
+    )
     def run_check_server_status_cron_job(
         self: "Server",
         bsm: "BotoSesManager",
@@ -535,6 +592,10 @@ class ServerOperationMixin:  # pragma: no cover
             instance_ids=self.metadata.ec2_inst.id,
         )
 
+    @logger.emoji_block(
+        msg="Stop Check Server Status Cron Job",
+        emoji="🖥",
+    )
     def stop_check_server_status_cron_job(
         self: "Server",
         bsm: "BotoSesManager",
@@ -553,7 +614,11 @@ class ServerOperationMixin:  # pragma: no cover
             instance_ids=self.metadata.ec2_inst.id,
         )
 
-    def run_server(
+    @logger.emoji_block(
+        msg="Run Game Server",
+        emoji="🖥",
+    )
+    def run_game_server(
         self: "Server",
         bsm: "BotoSesManager",
     ):
@@ -570,7 +635,11 @@ class ServerOperationMixin:  # pragma: no cover
             instance_ids=self.metadata.ec2_inst.id,
         )
 
-    def stop_server(
+    @logger.emoji_block(
+        msg="Stop Game Server",
+        emoji="🖥",
+    )
+    def stop_game_server(
         self: "Server",
         bsm: "BotoSesManager",
     ):

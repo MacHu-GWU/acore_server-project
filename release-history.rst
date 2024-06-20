@@ -15,7 +15,18 @@ x.y.z (Backlog)
 **Miscellaneous**
 
 
-0.2.5 (Backlog)
+1.0.1 (2024-06-20)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**💥Breaking Changes**
+
+- Moved most of server operation logics into this library.
+
+**Features and Improvements**
+
+- Add lot of `workflows <https://acore-server.readthedocs.io/en/latest/search.html?q=Operation+and+Workflow&check_keywords=yes&area=default>`_.
+
+
+0.2.5 (2023-07-18)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 **Features and Improvements**
 

@@ -13,8 +13,9 @@ def test():
     _ = api.Server.id
     _ = api.Server.env_name
     _ = api.Server.server_name
-    _ = api.Server.run_ec2
-    _ = api.Server.run_rds
+    _ = api.Server.create_ec2
+    _ = api.Server.create_rds_from_scratch
+    _ = api.Server.create_rds_from_snapshot
     _ = api.Server.start_ec2
     _ = api.Server.start_rds
     _ = api.Server.associate_eip_address
@@ -25,13 +26,12 @@ def test():
     _ = api.Server.delete_rds
     _ = api.Server.bootstrap
     _ = api.Server.run_check_server_status_cron_job
-    _ = api.Server.run_server
-    _ = api.Server.stop_server
+    _ = api.Server.stop_check_server_status_cron_job
+    _ = api.Server.run_game_server
+    _ = api.Server.stop_game_server
     _ = api.Server.wow_status
     _ = api.Server.create_ssh_tunnel
     _ = api.Server.list_ssh_tunnel
-    _ = api.Server.test_ssh_tunnel
-    _ = api.Server.kill_ssh_tunnel
 
 
 if __name__ == "__main__":
