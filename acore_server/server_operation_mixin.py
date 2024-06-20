@@ -88,21 +88,22 @@ class ServerOperationMixin:  # pragma: no cover
         acore_db_app_version: T.Optional[str] = None,
         acore_server_bootstrap_version: T.Optional[str] = None,
     ) -> str:
-        cmd = (
+        """
+        构建需要在 EC2 服务器上运行的 bootstrap 命令.
+        """
+        script_url = "https://raw.githubusercontent.com/MacHu-GWU/acore_server_bootstrap-project/main/install.py"
+        main_part = (
             f"sudo /home/ubuntu/.pyenv/shims/python{python_version} -c "
-            '"$(curl -fsSL https://raw.githubusercontent.com/MacHu-GWU/acore_server_bootstrap-project/main/install.py)"'
+            f'"$(curl -fsSL {script_url})"'
         )
+        parts = [main_part]
         if acore_soap_app_version:
-            cmd = (
-                cmd + f" --acore_soap_app_version {self.config.acore_soap_app_version}"
-            )
+            parts.append(f"--acore_soap_app_version {self.config.acore_soap_app_version}")
         if acore_db_app_version:
-            cmd = cmd + f" --acore_db_app_version {self.config.acore_db_app_version}"
+            parts.append(f"--acore_db_app_version {self.config.acore_db_app_version}")
         if acore_server_bootstrap_version:
-            cmd = (
-                cmd
-                + f" --acore_server_bootstrap_version {self.config.acore_server_bootstrap_version}"
-            )
+            parts.append(f"--acore_server_bootstrap_version {self.config.acore_server_bootstrap_version}")
+        cmd = " ".join(parts)
         return cmd
 
     @logger.emoji_block(
@@ -487,6 +488,10 @@ class ServerOperationMixin:  # pragma: no cover
             )
         return res
 
+    @logger.emoji_block(
+        msg="🗑🛢Delete EC2 instance",
+        emoji="🛢",
+    )
     def bootstrap(
         self: "Server",
         bsm: "BotoSesManager",

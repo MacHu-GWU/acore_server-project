@@ -151,6 +151,9 @@ class ServerWorkflowMixin:  # pragma: no cover
         delete_ami_afterwards: bool = False,
         delete_snapshot_afterwards: bool = False,
     ):
+        """
+        Implement :ref:`create-cloned-server`.
+        """
         aws_console = AWSConsole.from_bsm(bsm=bsm)
         workflow = CreateClonedServerWorkflow.load(
             bsm=bsm, s3_path=s3path_workflow, workflow_id=workflow_id
@@ -299,6 +302,9 @@ class ServerWorkflowMixin:  # pragma: no cover
         create_backup_db_snapshot: bool = True,
         skip_prompt: bool = False,
     ):
+        """
+        Implement :ref:`delete-server`.
+        """
         aws_console = AWSConsole.from_bsm(bsm=bsm)
         workflow = DeleteServerWorkflow.load(
             bsm=bsm, s3_path=s3path_workflow, workflow_id=workflow_id
