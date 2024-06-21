@@ -347,11 +347,6 @@ class ServerWorkflowMixin:  # pragma: no cover
             raise ValueError("server config is not ready for create cloned server")
         logger.info("✅ new server configuration is fine.")
 
-        # logger.info("Check new server status ...")
-        # new_server.ensure_ec2_not_exists(bsm=bsm)
-        # new_server.ensure_rds_not_exists(bsm=bsm)
-        # logger.info("✅ new server not exists, ready to create clone.")
-
         # --- create DB Snapshot
         utc_now = get_utc_now()
         if workflow.is_db_snapshot_created() is False:

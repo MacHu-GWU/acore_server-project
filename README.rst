@@ -3,7 +3,7 @@
     :target: https://acore-server.readthedocs.io/en/latest/
     :alt: Documentation Status
 
-.. image:: https://github.com/MacHu-GWU/acore_server-project/workflows/CI/badge.svg
+.. image:: https://github.com/MacHu-GWU/acore_server-project/actions/workflows/main.yml/badge.svg
     :target: https://github.com/MacHu-GWU/acore_server-project/actions?query=workflow:CI
 
 .. image:: https://codecov.io/gh/MacHu-GWU/acore_server-project/branch/main/graph/badge.svg
