@@ -3,10 +3,14 @@
 from acore_server.api import Manager
 
 
+# ------------------------------------------------------------------------------
+# PLEASE DOUBLE CHECK TO MAKE SURE YOU ARE WORKING ON THE RIGHT SERVER
+# ------------------------------------------------------------------------------
 manager = Manager(aws_profile="bmt_app_dev_us_east_1", env_name="sbx")
-server = manager.green
-server.show_server_config()
-server.show_server_status()
+server = manager.blue
+
+# server.show_server_config()
+# server.show_server_status()
 
 # server.run_rds(bsm=bsm, stack_exports=stack_exports)
 # server.run_ec2(
@@ -38,33 +42,33 @@ server.show_server_status()
 # server.run_server(bsm=bsm)
 # server.stop_server(bsm=bsm)
 
-# server.create_ssh_tunnel()
-# server.list_ssh_tunnel()
-# server.kill_ssh_tunnel()
+# server.create_ssh_tunnel(bsm=manager.bsm)
+# server.list_ssh_tunnel(bsm=manager.bsm)
+# server.kill_ssh_tunnel(bsm=manager.bsm)
 # server.test_ssh_tunnel()
 
 
 # ------------------------------------------------------------------------------
 # Create Cloned Server
 # ------------------------------------------------------------------------------
-workflow_id = "create_cloned_server-2024-06-19-04-27-00"
-server.create_cloned_server(
-    bsm=manager.bsm,
-    workflow_id=workflow_id,
-    s3path_workflow=manager.s3dir_env_workflow.joinpath(
-        server.server_name, f"{workflow_id}.json"
-    ),
-    new_server_id="sbx-blue",
-    stack_exports=manager.stack_exports,
-    skip_reboot=True,
-    delete_ami_afterwards=True,
-    delete_snapshot_afterwards=True,
-)
+# workflow_id = "create_cloned_server-2024-06-19-04-27-00"
+# server.create_cloned_server(
+#     bsm=manager.bsm,
+#     workflow_id=workflow_id,
+#     s3path_workflow=manager.s3dir_env_workflow.joinpath(
+#         server.server_name, f"{workflow_id}.json"
+#     ),
+#     new_server_id="sbx-blue",
+#     stack_exports=manager.stack_exports,
+#     skip_reboot=True,
+#     delete_ami_afterwards=True,
+#     delete_snapshot_afterwards=True,
+# )
 
 # ------------------------------------------------------------------------------
 # Create Updated Server
 # ------------------------------------------------------------------------------
-# workflow_id = "create_cloned_server-2024-06-20-02-46-00"
+# workflow_id = "create_cloned_server-2024-06-20-23-11-00"
 # server.create_updated_server(
 #     bsm=manager.bsm,
 #     workflow_id=workflow_id,
@@ -78,12 +82,16 @@ server.create_cloned_server(
 #     delete_snapshot_afterwards=False,
 # )
 
-
-# workflow_id = "delete_server-2024-06-20-11-14-00"
+# ------------------------------------------------------------------------------
+# Delete Server
+# ------------------------------------------------------------------------------
+# workflow_id = "delete_server-2024-06-20-04-19-00"
 # server.delete_server(
-#     bsm=bsm,
+#     bsm=manager.bsm,
 #     workflow_id=workflow_id,
-#     s3path_workflow=s3dir_workflow.joinpath(f"{workflow_id}.json"),
+#     s3path_workflow=manager.s3dir_env_workflow.joinpath(
+#         server.server_name, f"{workflow_id}.json"
+#     ),
 #     skip_reboot=True,
 #     create_backup_ec2_ami=False,
 #     create_backup_db_snapshot=False,

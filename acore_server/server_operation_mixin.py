@@ -5,6 +5,7 @@ todo: doc string
 """
 
 import typing as T
+from pathlib import Path
 from datetime import datetime, timezone
 
 from boto_session_manager import BotoSesManager
@@ -18,7 +19,6 @@ from acore_server_config.api import EnvEnum
 from acore_db_ssh_tunnel import api as acore_db_ssh_tunnel
 from .vendor.hashes import hashes
 
-from .paths import path_pem_file as default_path_pem_file
 from .constants import EC2_USERNAME, DB_PORT
 from .wserver_infra_exports import StackExports
 from .logger import logger
@@ -685,9 +685,27 @@ class ServerOperationMixin:  # pragma: no cover
             else:
                 return wow_status
 
+    def _get_path_pem_file(self: "Server", bsm: "BotoSesManager") -> Path:
+        path = (
+            Path.home()
+            .joinpath("ec2-pem")
+            .joinpath(
+                bsm.aws_account_alias,
+                bsm.aws_region,
+                f"{self.metadata.ec2_inst.key_name}.pem",
+            )
+        )
+        if path.exists() is False:
+            raise FileNotFoundError(
+                f"Failed to locate the pem file: {path}, "
+                "make sure you have the pem file at ${HOME}/ec2-pem/${AWS_ACCOUNT_ALIAS}/${AWS_REGION}/${KEY_NAME}.pem"
+            )
+        return path
+
     def create_ssh_tunnel(
         self: "Server",
-        path_pem_file=default_path_pem_file,
+        bsm: "BotoSesManager",
+        path_pem_file: T.Optional[Path] = None,
     ):
         """
         创建一个本地的 SSH Tunnel, 用于本地数据库开发.
@@ -696,6 +714,8 @@ class ServerOperationMixin:  # pragma: no cover
             raise ConnectionError(
                 "cannot create ssh tunnel, EC2 or RDS is not running."
             )
+        if path_pem_file is None:
+            path_pem_file = self._get_path_pem_file(bsm=bsm)
         acore_db_ssh_tunnel.create_ssh_tunnel(
             path_pem_file=path_pem_file,
             db_host=self.metadata.rds_inst.endpoint,
@@ -706,11 +726,14 @@ class ServerOperationMixin:  # pragma: no cover
 
     def list_ssh_tunnel(
         self: "Server",
-        path_pem_file=default_path_pem_file,
+        bsm: "BotoSesManager",
+        path_pem_file: "Path" = None,
     ):
         """
         列出所有正在运行中的 SSH Tunnel.
         """
+        if path_pem_file is None:
+            path_pem_file = self._get_path_pem_file(bsm=bsm)
         acore_db_ssh_tunnel.list_ssh_tunnel(path_pem_file)
 
     def test_ssh_tunnel(self: "Server"):
@@ -728,11 +751,14 @@ class ServerOperationMixin:  # pragma: no cover
 
     def kill_ssh_tunnel(
         self: "Server",
-        path_pem_file=default_path_pem_file,
+        bsm: "BotoSesManager",
+        path_pem_file: "Path" = None,
     ):
         """
         关闭所有正在运行中的 SSH Tunnel.
         """
+        if path_pem_file is None:
+            path_pem_file = self._get_path_pem_file(bsm=bsm)
         acore_db_ssh_tunnel.kill_ssh_tunnel(path_pem_file)
 
     @logger.emoji_block(

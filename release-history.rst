@@ -15,6 +15,13 @@ x.y.z (Backlog)
 **Miscellaneous**
 
 
+1.0.2 (2024-06-20)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**Bugfixes**
+
+- Fix a bug that ``Server.create_ssh_tunnel(...)``, ``Server.list_ssh_tunnel(...)``, ``Server.test_ssh_tunnel(...)``, ``Server.kill_ssh_tunnel(...)`` methods failed to locate the pem file correctly.
+
+
 1.0.1 (2024-06-20)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 **💥Breaking Changes**
