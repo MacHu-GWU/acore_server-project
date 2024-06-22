@@ -19,6 +19,9 @@ from .fleet import Fleet
 class Manager:
     """
     This manager class is to simplify executing Server workflow methods.
+
+    See https://github.com/MacHu-GWU/acore_server-project/blob/main/debug/manager_server.py
+    for an example of how to use this class.
     """
 
     aws_profile: str = dataclasses.field()

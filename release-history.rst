@@ -17,6 +17,15 @@ x.y.z (Backlog)
 
 1.0.3 (2024-06-21)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**💥Breaking Changes**
+
+- remove the following deprecated methods, these features are moved to `acore_server_bootstrap.api.Remoter <https://acore-server-bootstrap.readthedocs.io/en/latest/search.html?q=Remote+Bootstrap&check_keywords=yes&area=default>`_:
+    - ``Server.bootstrap()``
+    - ``Server.run_check_server_status_cron_job()``
+    - ``Server.stop_check_server_status_cron_job()``
+    - ``Server.run_game_server()``
+    - ``Server.stop_game_server()``
+
 **Bugfixes**
 
 - Fix a bug in ``Server.build_bootstrap_command(...)`` method that the method doesn't use the explicit library version.
