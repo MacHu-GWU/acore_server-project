@@ -419,7 +419,7 @@ class ServerOperationMixin:  # pragma: no cover
         check: bool = True,
         wait: bool = True,
         auto_resolve: bool = True,
-    ) -> "StartInstancesResultTypeDef":
+    ) -> T.Optional["StartInstancesResultTypeDef"]:
         """
         启动关闭着的 EC2.
 
@@ -431,6 +431,21 @@ class ServerOperationMixin:  # pragma: no cover
         self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         if check:
             self.metadata.ensure_ec2_exists()
+            # 如果已经在运行了, 那么已经达到目的, 直接返回既可
+            if self.metadata.ec2_inst.is_running():
+                return
+            # 看看是不是正在启动中, 如果是, 那么等待它启动完成后直接返回既可
+            if wait:
+                try:
+                    _ec2_inst = self.metadata.ec2_inst.wait_for_running(
+                        ec2_client=bsm.ec2_client,
+                        timeout=300,
+                    )
+                    self.metadata.ec2_inst = _ec2_inst
+                    return
+                except simple_aws_ec2.StatusError:
+                    pass
+            # 如果还没有启动, 那么看看是不是已经准备好了, 如果没有准备好, 并且 auto_resolve = True, 那么等待它准备好
             if self.metadata.ec2_inst.is_ready_to_start() is False:
                 if auto_resolve:
                     _ec2_inst = self.metadata.ec2_inst.wait_for_stopped(
@@ -459,7 +474,7 @@ class ServerOperationMixin:  # pragma: no cover
         check: bool = True,
         wait: bool = True,
         auto_resolve: bool = True,
-    ) -> "StartDBInstanceResultTypeDef":
+    ) -> T.Optional["StartDBInstanceResultTypeDef"]:
         """
         启动关闭着的 RDS.
 
@@ -471,6 +486,18 @@ class ServerOperationMixin:  # pragma: no cover
         self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         if check:
             self.metadata.ensure_rds_exists()
+            if self.metadata.rds_inst.is_available():
+                return None
+            if wait:
+                try:
+                    _rds_inst = self.metadata.rds_inst.wait_for_available(
+                        rds_client=bsm.rds_client,
+                        timeout=900,
+                    )
+                    self.metadata.rds_inst = _rds_inst
+                    return
+                except simple_aws_rds.StatusError:
+                    pass
             if self.metadata.rds_inst.is_ready_to_start() is False:
                 if auto_resolve:
                     _rds_inst = self.metadata.rds_inst.wait_for_stopped(
@@ -578,7 +605,7 @@ class ServerOperationMixin:  # pragma: no cover
         check: bool = True,
         wait: bool = True,
         auto_resolve: bool = True,
-    ) -> "StopInstancesResultTypeDef":
+    ) -> T.Optional["StopInstancesResultTypeDef"]:
         """
         关闭 EC2.
 
@@ -590,6 +617,18 @@ class ServerOperationMixin:  # pragma: no cover
         self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         if check:
             self.metadata.ensure_ec2_exists()
+            if self.metadata.ec2_inst.is_stopped():
+                return None
+            if wait:
+                try:
+                    _ec2_inst = self.metadata.ec2_inst.wait_for_stopped(
+                        ec2_client=bsm.ec2_client,
+                        timeout=300,
+                    )
+                    self.metadata.ec2_inst = _ec2_inst
+                    return
+                except simple_aws_ec2.StatusError:
+                    pass
             if self.metadata.ec2_inst.is_ready_to_stop() is False:
                 if auto_resolve:
                     _ec2_inst = self.metadata.ec2_inst.wait_for_running(
@@ -619,7 +658,7 @@ class ServerOperationMixin:  # pragma: no cover
         check: bool = True,
         wait: bool = True,
         auto_resolve: bool = True,
-    ) -> "StopDBInstanceResultTypeDef":
+    ) -> T.Optional["StopDBInstanceResultTypeDef"]:
         """
         关闭 RDS.
 
@@ -631,6 +670,18 @@ class ServerOperationMixin:  # pragma: no cover
         self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         if check:
             self.metadata.ensure_rds_exists()
+            if self.metadata.rds_inst.is_stopped():
+                return None
+            if wait:
+                try:
+                    _rds_inst = self.metadata.rds_inst.wait_for_stopped(
+                        rds_client=bsm.rds_client,
+                        timeout=900,
+                    )
+                    self.metadata.rds_inst = _rds_inst
+                    return
+                except simple_aws_rds.StatusError:
+                    pass
             if self.metadata.rds_inst.is_ready_to_stop() is False:
                 if auto_resolve:
                     _rds_inst = self.metadata.rds_inst.wait_for_available(
@@ -882,7 +933,7 @@ class ServerOperationMixin:  # pragma: no cover
             f"create image {ami_name!r} from ec2 instance {self.metadata.ec2_inst.id}"
         )
         res = bsm.ec2_client.create_image(
-            InstanceId=self.metadata.ec2_inst.id,
+            InstanceId=ec2_inst.id,
             Name=ami_name,
             NoReboot=skip_reboot,
             TagSpecifications=[
