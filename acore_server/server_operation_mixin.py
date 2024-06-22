@@ -1,13 +1,30 @@
 # -*- coding: utf-8 -*-
 
 """
-todo: doc string
+This module implements all "Operation" mentioned in :ref:`operation-and-workflow`.
+
+Each Operation represents a discrete task on the server. Typically,
+these operation methods accept the following parameters:
+
+1. ``bsm``: An AWS Boto3 Session Manager object.
+2. ``check``: A boolean flag that determines whether to verify
+    if the current state meets the operation's prerequisites.
+3. ``wait``: A boolean flag that specifies whether to await
+    completion of asynchronous operations.
+4. ``auto_resolve``: A boolean flag that controls automatic state resolution.
+    When set to True, the system will:
+   - Attempt to wait for the state to meet the operation's prerequisites
+        if they're not initially satisfied.
+   - Throw an exception if it's impossible to reach the required state
+        within a reasonable timeframe.
+    It is only used when ``check`` is set to True.
 """
 
 import typing as T
 from pathlib import Path
 from datetime import datetime, timezone
 
+import acore_server_metadata.exc
 from boto_session_manager import BotoSesManager
 from aws_ssm_run_command.api import better_boto as ssm_better_boto
 import simple_aws_ec2.api as simple_aws_ec2
@@ -142,7 +159,7 @@ class ServerOperationMixin:  # pragma: no cover
         stack_exports: "StackExports",
         ami_id: T.Optional[str] = None,
         instance_type: T.Optional[str] = None,
-        python_version: str = "3.8",
+        python_version: str = "3",
         acore_soap_app_version: T.Optional[str] = None,
         acore_db_app_version: T.Optional[str] = None,
         acore_server_bootstrap_version: T.Optional[str] = None,
@@ -153,12 +170,26 @@ class ServerOperationMixin:  # pragma: no cover
     ) -> "ReservationResponseTypeDef":
         """
         为服务器创建一台新的 EC2. 注意, 一般先创建 RDS, 等 RDS 已经在运行了, 再创建 EC2.
-        因为 EC2 有一个 bootstrap 的过程, 这个过程中需要跟数据库通信.
+        因为 EC2 有一个 bootstrap 的过程, 这个过程中需要跟数据库通信. 数据库没有准备好
+        bootstrap 是不可能成功的.
 
+        :param bsm: Boto3 Session Manager.
+        :param stack_exports: cloudformation stack exports object that contains
+            AWS infrastructure information.
         :param ami_id: 你要从哪个 AMI 来创建 EC2? 如果不指定, 则使用 config 中的 AMI ID.
             这个参数之所以是可选是因为在有的 workflow 中, 我们已经知道 AMI ID 了;
             而有的 workflow 中, 我们要临时创建一个新的 AMI ID, 此时还不知道这个 ID.
+        :param instance_type: EC2 的 instance type 是什么, 如果不指定, 则使用 config
+            中的值.
+        :param python_version: see :meth:`build_bootstrap_command`.
+        :param acore_soap_app_version: see :meth:`build_bootstrap_command`.
+        :param acore_db_app_version: see :meth:`build_bootstrap_command`.
+        :param acore_server_bootstrap_version: see :meth:`build_bootstrap_command`.
+        :param tags: additional AWS tags to add to the EC2 instance.
+        :param check: if True, check if it meets the prerequisites for this operation.
+        :param wait: if True, wait for the operation to complete.
         """
+        self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         bootstrap_command = self.build_bootstrap_command(
             python_version=python_version,
             acore_soap_app_version=acore_soap_app_version,
@@ -170,7 +201,7 @@ class ServerOperationMixin:  # pragma: no cover
             bootstrap_command,
         ]
         if check:
-            self.ensure_ec2_not_exists(bsm=bsm)
+            self.metadata.ensure_ec2_not_exists()
         if tags is None:
             tags = dict()
         tags["Name"] = self.id
@@ -214,7 +245,10 @@ class ServerOperationMixin:  # pragma: no cover
         if wait:
             inst_id = res["Instances"][0]["InstanceId"]
             ec2_inst = simple_aws_ec2.Ec2Instance(id=inst_id, status="na")
-            ec2_inst.wait_for_running(ec2_client=bsm.ec2_client, timeout=300)
+            _ec2_inst = ec2_inst.wait_for_running(
+                ec2_client=bsm.ec2_client, timeout=300
+            )
+            self.metadata.ec2_inst = _ec2_inst
         return res
 
     @logger.emoji_block(
@@ -237,9 +271,22 @@ class ServerOperationMixin:  # pragma: no cover
         不使用 DB Snapshot, 创建一台全新的数据库.
 
         - https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/rds/client/create_db_instance.html
+
+        :param bsm: Boto3 Session Manager.
+        :param stack_exports: cloudformation stack exports object that contains
+            AWS infrastructure information.
+        :param db_instance_class: Database 的 instance type 是什么, 如果不指定, 则使用 config
+            中的值.
+        :param engine_version: database engine version, in this project we use 8.X.Y (mysql).
+            如果不指定, 则使用 config 中的值.
+        :param multi_az: 是否启用 Multi-AZ 高可用性. 如果不指定, 则使用 config 中的值.
+        :param tags: additional AWS tags to add to the EC2 instance.
+        :param check: if True, check if it meets the prerequisites for this operation.
+        :param wait: if True, wait for the operation to complete.
         """
+        self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         if check:
-            self.ensure_rds_not_exists(bsm=bsm)
+            self.metadata.ensure_rds_not_exists()
         if tags is None:
             tags = dict()
         tags[TagKey.SERVER_ID] = self.id
@@ -273,7 +320,10 @@ class ServerOperationMixin:  # pragma: no cover
         )
         if wait:
             rds_inst = simple_aws_rds.RDSDBInstance(id=self.id, status="na")
-            rds_inst.wait_for_available(rds_client=bsm.rds_client, timeout=600)
+            _rds_inst = rds_inst.wait_for_available(
+                rds_client=bsm.rds_client, timeout=900
+            )
+            self.metadata.rds_inst = _rds_inst
         return res
 
     @logger.emoji_block(
@@ -295,18 +345,24 @@ class ServerOperationMixin:  # pragma: no cover
         """
         为服务器创建一台新的数据库.
 
-        :param bsm:
-        :param stack_exports:
-        :param db_snapshot_id: 要从哪个 DB Snapshot 来创建 RDS? 如果不指定, 则使用 config 中的 DB Snapshot ID.
-            这个参数之所以是可选是因为在有的 workflow 中, 我们已经知道 DB Snapshot ID 了;
-            而有的 workflow 中, 我们要临时创建一个新的 DB Snapshot ID, 此时还不知道这个 ID.
-        :param db_instance_class:
-        :param multi_az:
-        :param tags:
-        :param check:
+
+        :param bsm: Boto3 Session Manager.
+        :param stack_exports: cloudformation stack exports object that contains
+            AWS infrastructure information.
+        :param db_snapshot_id: 要从哪个 DB Snapshot 来创建 RDS? 如果不指定,
+            则使用 config 中的 DB Snapshot ID. 这个参数之所以是可选是因为在有的 workflow 中,
+            我们已经知道 DB Snapshot ID 了; 而有的 workflow 中, 我们要临时创建一个新的
+            DB Snapshot ID, 此时还不知道这个 ID.
+        :param db_instance_class: Database 的 instance type 是什么, 如果不指定, 则使用 config
+            中的值.
+        :param multi_az: 是否启用 Multi-AZ 高可用性. 如果不指定, 则使用 config 中的值.
+        :param tags: additional AWS tags to add to the EC2 instance.
+        :param check: if True, check if it meets the prerequisites for this operation.
+        :param wait: if True, wait for the operation to complete.
         """
+        self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         if check:
-            self.ensure_rds_not_exists(bsm=bsm)
+            self.metadata.ensure_rds_not_exists()
         if tags is None:
             tags = dict()
         tags[TagKey.SERVER_ID] = self.id
@@ -347,7 +403,10 @@ class ServerOperationMixin:  # pragma: no cover
         )
         if wait:
             rds_inst = simple_aws_rds.RDSDBInstance(id=self.id, status="na")
-            rds_inst.wait_for_available(rds_client=bsm.rds_client, timeout=600)
+            _rds_inst = rds_inst.wait_for_available(
+                rds_client=bsm.rds_client, timeout=900
+            )
+            self.metadata.rds_inst = _rds_inst
         return res
 
     @logger.emoji_block(
@@ -359,16 +418,35 @@ class ServerOperationMixin:  # pragma: no cover
         bsm: "BotoSesManager",
         check: bool = True,
         wait: bool = True,
+        auto_resolve: bool = True,
     ) -> "StartInstancesResultTypeDef":
         """
         启动关闭着的 EC2.
+
+        :param bsm: Boto3 Session Manager.
+        :param check: if True, check if it meets the prerequisites for this operation.
+        :param wait: if True, wait for the operation to complete.
+        :param auto_resolve: if True, wait RDS to be ready to start, when EC2 is still stopping.
         """
+        self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         if check:
-            self.ensure_ec2_is_ready_to_start(bsm=bsm)
+            self.metadata.ensure_ec2_exists()
+            if self.metadata.ec2_inst.is_ready_to_start() is False:
+                if auto_resolve:
+                    _ec2_inst = self.metadata.ec2_inst.wait_for_stopped(
+                        ec2_client=bsm.ec2_client,
+                        timeout=300,
+                    )
+                    self.metadata.ec2_inst = _ec2_inst
+                else:
+                    self.metadata.ensure_ec2_is_ready_to_start()
         ec2_inst = self.metadata.ec2_inst
         res = ec2_inst.start_instance(ec2_client=bsm.ec2_client)
         if wait:
-            ec2_inst.wait_for_running(ec2_client=bsm.ec2_client, timeout=300)
+            _ec2_inst = ec2_inst.wait_for_running(
+                ec2_client=bsm.ec2_client, timeout=300
+            )
+            self.metadata.ec2_inst = _ec2_inst
         return res
 
     @logger.emoji_block(
@@ -380,16 +458,35 @@ class ServerOperationMixin:  # pragma: no cover
         bsm: "BotoSesManager",
         check: bool = True,
         wait: bool = True,
+        auto_resolve: bool = True,
     ) -> "StartDBInstanceResultTypeDef":
         """
         启动关闭着的 RDS.
+
+        :param bsm: Boto3 Session Manager.
+        :param check: if True, check if it meets the prerequisites for this operation.
+        :param wait: if True, wait for the operation to complete.
+        :param auto_resolve: if True, wait RDS to be ready to start, when RDS is still stopping.
         """
+        self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         if check:
-            self.ensure_rds_is_ready_to_start(bsm=bsm)
+            self.metadata.ensure_rds_exists()
+            if self.metadata.rds_inst.is_ready_to_start() is False:
+                if auto_resolve:
+                    _rds_inst = self.metadata.rds_inst.wait_for_stopped(
+                        rds_client=bsm.rds_client,
+                        timeout=900,
+                    )
+                    self.metadata.rds_inst = _rds_inst
+                else:
+                    self.metadata.ensure_rds_is_ready_to_start()
         rds_inst = self.metadata.rds_inst
         res = rds_inst.start_db_instance(rds_client=bsm.rds_client)
         if wait:
-            rds_inst.wait_for_available(rds_client=bsm.rds_client, timeout=600)
+            _rds_inst = rds_inst.wait_for_available(
+                rds_client=bsm.rds_client, timeout=900
+            )
+            self._rds_inst = _rds_inst
         return res
 
     @logger.emoji_block(
@@ -406,8 +503,9 @@ class ServerOperationMixin:  # pragma: no cover
         给 EC2 关联 EIP.
         """
         if self.config.ec2_eip_allocation_id is not None:
+            self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
             if check:
-                ec2_inst = self.ensure_ec2_exists(bsm=bsm)
+                ec2_inst = self.metadata.ensure_ec2_exists()
             else:
                 ec2_inst = self.metadata.ec2_inst
             # check if this allocation id is already associated with an instance
@@ -439,8 +537,9 @@ class ServerOperationMixin:  # pragma: no cover
         """
         更新数据库的 master password.
         """
+        self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         if check:
-            rds_inst = self.ensure_rds_exists(bsm=bsm)
+            rds_inst = self.metadata.ensure_rds_exists()
         else:
             rds_inst = self.metadata.rds_inst
 
@@ -478,16 +577,36 @@ class ServerOperationMixin:  # pragma: no cover
         bsm: "BotoSesManager",
         check: bool = True,
         wait: bool = True,
+        auto_resolve: bool = True,
     ) -> "StopInstancesResultTypeDef":
         """
         关闭 EC2.
+
+        :param bsm: Boto3 Session Manager.
+        :param check: if True, check if it meets the prerequisites for this operation.
+        :param wait: if True, wait for the operation to complete.
+        :param auto_resolve: if True, wait EC2 to be ready to stop, when EC2 is still pending.
         """
+        self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         if check:
-            self.ensure_ec2_is_ready_to_stop(bsm=bsm)
+            self.metadata.ensure_ec2_exists()
+            if self.metadata.ec2_inst.is_ready_to_stop() is False:
+                if auto_resolve:
+                    _ec2_inst = self.metadata.ec2_inst.wait_for_running(
+                        ec2_client=bsm.ec2_client,
+                        timeout=300,
+                    )
+                    self.metadata.ec2_inst = _ec2_inst
+                else:
+                    self.metadata.ensure_ec2_is_ready_to_stop()
         ec2_inst = self.metadata.ec2_inst
         res = ec2_inst.stop_instance(ec2_client=bsm.ec2_client)
         if wait:
-            ec2_inst.wait_for_stopped(ec2_client=bsm.ec2_client, timeout=300)
+            _ec2_inst = ec2_inst.wait_for_stopped(
+                ec2_client=bsm.ec2_client,
+                timeout=300,
+            )
+            self.metadata.ec2_inst = _ec2_inst
         return res
 
     @logger.emoji_block(
@@ -499,16 +618,36 @@ class ServerOperationMixin:  # pragma: no cover
         bsm: "BotoSesManager",
         check: bool = True,
         wait: bool = True,
+        auto_resolve: bool = True,
     ) -> "StopDBInstanceResultTypeDef":
         """
         关闭 RDS.
+
+        :param bsm: Boto3 Session Manager.
+        :param check: if True, check if it meets the prerequisites for this operation.
+        :param wait: if True, wait for the operation to complete.
+        :param auto_resolve: if True, wait RDS to be ready to stop, when RDS is still starting.
         """
+        self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         if check:
-            self.ensure_rds_is_ready_to_stop(bsm=bsm)
+            self.metadata.ensure_rds_exists()
+            if self.metadata.rds_inst.is_ready_to_stop() is False:
+                if auto_resolve:
+                    _rds_inst = self.metadata.rds_inst.wait_for_available(
+                        rds_client=bsm.rds_client,
+                        timeout=900,
+                    )
+                    self.metadata.rds_inst = _rds_inst
+                else:
+                    self.metadata.ensure_rds_is_ready_to_stop()
         rds_inst = self.metadata.rds_inst
         res = rds_inst.stop_db_instance(rds_client=bsm.rds_client)
         if wait:
-            rds_inst.wait_for_stopped(rds_client=bsm.rds_client, timeout=300)
+            _rds_inst = rds_inst.wait_for_stopped(
+                rds_client=bsm.rds_client,
+                timeout=300,
+            )
+            self.metadata.rds_inst = _rds_inst
         return res
 
     @logger.emoji_block(
@@ -519,14 +658,23 @@ class ServerOperationMixin:  # pragma: no cover
         self: "Server",
         bsm: "BotoSesManager",
         check: bool = True,
+        wait: bool = True,
     ) -> "TerminateInstancesResultTypeDef":
         """
         删除 EC2.
+
+        :param bsm: Boto3 Session Manager.
+        :param check: if True, check if it meets the prerequisites for this operation.
+        :param wait: if True, wait for the operation to complete.
         """
+        self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         if check:
-            self.ensure_ec2_exists(bsm=bsm)
+            self.metadata.ensure_ec2_exists()
         ec2_inst = self.metadata.ec2_inst
         res = ec2_inst.terminate_instance(ec2_client=bsm.ec2_client)
+        if wait:
+            ec2_inst.wait_for_terminated(ec2_client=bsm.ec2_client, timeout=300)
+            self.metadata.ec2_inst = None
         return res
 
     @logger.emoji_block(
@@ -541,11 +689,17 @@ class ServerOperationMixin:  # pragma: no cover
     ) -> "DeleteDBInstanceResultTypeDef":
         """
         删除 RDS.
+
+        :param bsm: Boto3 Session Manager.
+        :param check: if True, check if it meets the prerequisites for this operation.
+
+        todo: add waiter
         """
+        self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         if create_final_snapshot is None:
             create_final_snapshot = self.env_name == EnvEnum.prd.value
         if check:
-            self.ensure_rds_exists(bsm=bsm)
+            self.metadata.ensure_rds_exists()
         rds_inst = self.metadata.rds_inst
         if create_final_snapshot:
             snapshot_id = self._get_db_snapshot_id()
@@ -562,6 +716,32 @@ class ServerOperationMixin:  # pragma: no cover
                 delete_automated_backups=True,
             )
         return res
+
+    @logger.emoji_block(
+        msg="🖥Stop worldserver",
+        emoji="🖥",
+    )
+    def stop_worldserver(
+        self: "Server",
+        bsm: "BotoSesManager",
+    ):
+        """
+        停止魔兽世界游戏服务器. 这个命令不会失败. 它只是一个 async API call.
+
+        这个命令比较特殊, 它建立在服务器已经成功配置好了
+        `acore_server_bootstrap@1.0.1+ <https://github.com/MacHu-GWU/acore_server_bootstrap-project>`_
+        的前提上 (用到了 `stop_server <https://acore-server-bootstrap.readthedocs.io/en/latest/acore_server_bootstrap/remoter.html#acore_server_bootstrap.remoter.Remoter.stop_server>`_ 这个命令).
+        按理说我们这个库的 requirements 里没有依赖于 ``acore_server_bootstrap``,
+        但是实际上依赖了. 因为我们在运行 Stop Server workflow 的过程中需要有这一步.
+        所以这个函数算是例外了.
+        """
+        return ssm_better_boto.run_shell_script_async(
+            ssm_client=bsm.ssm_client,
+            commands=(
+                f"sudo -H -u ubuntu " f"{path_acore_server_bootstrap_cli} stop_server"
+            ),
+            instance_ids=self.metadata.ec2_inst.id,
+        )
 
     @property
     def wow_status(self: "Server") -> str:
@@ -683,11 +863,19 @@ class ServerOperationMixin:  # pragma: no cover
     ) -> "CreateImageResultTypeDef":
         """
         Create a new AMI from existing EC2.
+
+        :param bsm: Boto3 Session Manager.
+        :param ami_name: 是否要指定 ami_name, 如不指定则自动生成.
+        :param utc_now: 是否要指定 utc_now, 如不指定则自动生成.
+        :param skip_reboot: 是否要不关机直接创建 AMI.
+        :param check: if True, check if it meets the prerequisites for this operation.
+        :param wait: if True, wait for the operation to complete.
         """
+        self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         if ami_name is None:
             ami_name = self._get_ec2_ami_name(utc_now)
         if check:
-            ec2_inst = self.ensure_ec2_exists(bsm=bsm)
+            ec2_inst = self.metadata.ensure_ec2_exists()
         else:
             ec2_inst = self.metadata.ec2_inst
         logger.info(
@@ -722,13 +910,31 @@ class ServerOperationMixin:  # pragma: no cover
         snapshot_id: T.Optional[str] = None,
         check: bool = True,
         wait: bool = True,
+        auto_resolve: bool = True,
     ) -> "CreateDBSnapshotResultTypeDef":
+        """
+        Create a new DB snapshot from existing RDS. Note that you can only
+        create a snapshot when DB instance is available.
+
+        :param bsm: Boto3 Session Manager.
+        :param snapshot_id: 是否要指定 snapshot_id, 如不指定则自动生成.
+        :param check: if True, check if it meets the prerequisites for this operation.
+        :param wait: if True, wait for the operation to complete.
+        """
+        self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         if snapshot_id is None:
             snapshot_id = self._get_db_snapshot_id()
         if check:
-            rds_inst = self.ensure_rds_exists(bsm=bsm)
-        else:
-            rds_inst = self.metadata.rds_inst
+            self.metadata.ensure_rds_exists()
+            if self.metadata.rds_inst.is_available() is False:
+                if auto_resolve:
+                    _rds_inst = self.metadata.rds_inst.wait_for_available(
+                        rds_client=bsm.rds_client, timeout=900
+                    )
+                    self.metadata.rds_inst = _rds_inst
+                else:
+                    self.metadata.ensure_rds_is_running()
+        rds_inst = self.metadata.rds_inst
         logger.info(
             f"create db snapshot {snapshot_id!r} from db instance {rds_inst.id}"
         )

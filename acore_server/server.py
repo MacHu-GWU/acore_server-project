@@ -154,84 +154,84 @@ class Server(
         """
         return self.metadata.server_name
 
-    def ensure_ec2_not_exists(
-        self: "Server",
-        bsm: "BotoSesManager",
-    ) -> T.Optional[Ec2Instance]:
-        ec2_inst = self.metadata.get_ec2(bsm.ec2_client, id=self.id)
-        if ec2_inst is not None:  # pragma: no cover
-            raise ServerAlreadyExistsError(f"EC2 instance {self.id!r} already exists!")
-        return ec2_inst
-
-    def ensure_ec2_exists(
-        self: "Server",
-        bsm: "BotoSesManager",
-    ) -> T.Optional[Ec2Instance]:
-        ec2_inst = self.metadata.get_ec2(bsm.ec2_client, id=self.id)
-        if ec2_inst is None:  # pragma: no cover
-            raise ServerNotFoundError(f"EC2 instance {self.id!r} not found!")
-        return ec2_inst
-
-    def ensure_rds_not_exists(
-        self: "Server",
-        bsm: "BotoSesManager",
-    ) -> T.Optional[RDSDBInstance]:
-        rds_inst = self.metadata.get_rds(bsm.rds_client, id=self.id)
-        if rds_inst is not None:  # pragma: no cover
-            raise ServerAlreadyExistsError(
-                f"RDS DB instance {self.id!r} already exists!"
-            )
-        return rds_inst
-
-    def ensure_rds_exists(
-        self: "Server",
-        bsm: "BotoSesManager",
-    ) -> T.Optional[RDSDBInstance]:
-        rds_inst = self.metadata.get_rds(bsm.rds_client, id=self.id)
-        if rds_inst is None:  # pragma: no cover
-            raise ServerNotFoundError(f"RDS DB instance {self.id!r} not found!")
-        return rds_inst
-
-    def ensure_ec2_is_ready_to_start(
-        self: "Server",
-        bsm: "BotoSesManager",
-    ) -> T.Optional[Ec2Instance]:
-        ec2_inst = self.ensure_ec2_exists(bsm)
-        if ec2_inst.is_ready_to_start() is False:
-            raise FailedToStartServerError(
-                f"EC2 instance {self.id!r} is not ready to start!"
-            )
-        return ec2_inst
-
-    def ensure_ec2_is_ready_to_stop(
-        self: "Server",
-        bsm: "BotoSesManager",
-    ) -> T.Optional[Ec2Instance]:
-        ec2_inst = self.ensure_ec2_exists(bsm)
-        if ec2_inst.is_ready_to_stop() is False:
-            raise FailedToStopServerError(
-                f"EC2 instance {self.id!r} is not ready to start!"
-            )
-        return ec2_inst
-
-    def ensure_rds_is_ready_to_start(
-        self: "Server",
-        bsm: "BotoSesManager",
-    ) -> T.Optional[RDSDBInstance]:
-        rds_inst = self.ensure_rds_exists(bsm)
-        if rds_inst.is_ready_to_start() is False:
-            raise FailedToStopServerError(
-                f"RDS instance {self.id!r} is not ready to start!"
-            )
-        return rds_inst
-
-    def ensure_rds_is_ready_to_stop(
-        self: "Server",
-        bsm: "BotoSesManager",
-    ) -> T.Optional[RDSDBInstance]:
-        rds_inst = self.ensure_rds_exists(bsm)
-        if rds_inst.is_ready_to_stop() is False:
-            raise FailedToStopServerError(
-                f"RDS instance {self.id!r} is not ready to stop!"
-            )
-        return rds_inst
+    # def ensure_ec2_not_exists(
+    #     self: "Server",
+    #     bsm: "BotoSesManager",
+    # ) -> T.Optional[Ec2Instance]:
+    #     ec2_inst = self.metadata.get_ec2(bsm.ec2_client, id=self.id)
+    #     if ec2_inst is not None:  # pragma: no cover
+    #         raise ServerAlreadyExistsError(f"EC2 instance {self.id!r} already exists!")
+    #     return ec2_inst
+    #
+    # def ensure_ec2_exists(
+    #     self: "Server",
+    #     bsm: "BotoSesManager",
+    # ) -> T.Optional[Ec2Instance]:
+    #     ec2_inst = self.metadata.get_ec2(bsm.ec2_client, id=self.id)
+    #     if ec2_inst is None:  # pragma: no cover
+    #         raise ServerNotFoundError(f"EC2 instance {self.id!r} not found!")
+    #     return ec2_inst
+    #
+    # def ensure_rds_not_exists(
+    #     self: "Server",
+    #     bsm: "BotoSesManager",
+    # ) -> T.Optional[RDSDBInstance]:
+    #     rds_inst = self.metadata.get_rds(bsm.rds_client, id=self.id)
+    #     if rds_inst is not None:  # pragma: no cover
+    #         raise ServerAlreadyExistsError(
+    #             f"RDS DB instance {self.id!r} already exists!"
+    #         )
+    #     return rds_inst
+    #
+    # def ensure_rds_exists(
+    #     self: "Server",
+    #     bsm: "BotoSesManager",
+    # ) -> T.Optional[RDSDBInstance]:
+    #     rds_inst = self.metadata.get_rds(bsm.rds_client, id=self.id)
+    #     if rds_inst is None:  # pragma: no cover
+    #         raise ServerNotFoundError(f"RDS DB instance {self.id!r} not found!")
+    #     return rds_inst
+    #
+    # def ensure_ec2_is_ready_to_start(
+    #     self: "Server",
+    #     bsm: "BotoSesManager",
+    # ) -> T.Optional[Ec2Instance]:
+    #     ec2_inst = self.ensure_ec2_exists(bsm)
+    #     if ec2_inst.is_ready_to_start() is False:
+    #         raise FailedToStartServerError(
+    #             f"EC2 instance {self.id!r} is not ready to start!"
+    #         )
+    #     return ec2_inst
+    #
+    # def ensure_ec2_is_ready_to_stop(
+    #     self: "Server",
+    #     bsm: "BotoSesManager",
+    # ) -> T.Optional[Ec2Instance]:
+    #     ec2_inst = self.ensure_ec2_exists(bsm)
+    #     if ec2_inst.is_ready_to_stop() is False:
+    #         raise FailedToStopServerError(
+    #             f"EC2 instance {self.id!r} is not ready to start!"
+    #         )
+    #     return ec2_inst
+    #
+    # def ensure_rds_is_ready_to_start(
+    #     self: "Server",
+    #     bsm: "BotoSesManager",
+    # ) -> T.Optional[RDSDBInstance]:
+    #     rds_inst = self.ensure_rds_exists(bsm)
+    #     if rds_inst.is_ready_to_start() is False:
+    #         raise FailedToStartServerError(
+    #             f"RDS instance {self.id!r} is not ready to start!"
+    #         )
+    #     return rds_inst
+    #
+    # def ensure_rds_is_ready_to_stop(
+    #     self: "Server",
+    #     bsm: "BotoSesManager",
+    # ) -> T.Optional[RDSDBInstance]:
+    #     rds_inst = self.ensure_rds_exists(bsm)
+    #     if rds_inst.is_ready_to_stop() is False:
+    #         raise FailedToStopServerError(
+    #             f"RDS instance {self.id!r} is not ready to stop!"
+    #         )
+    #     return rds_inst
