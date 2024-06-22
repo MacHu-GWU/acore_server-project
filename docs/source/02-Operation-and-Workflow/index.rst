@@ -12,6 +12,30 @@ What is Operation and Workflow
 2. **Workflow**: 为了达到特定目的对游戏服务器的一系列操作. 例如启动一个新的游戏服务器就包括启动 RDS, 等待 RDS 启动完成, 启动 EC2, 等待 EC2 启动完成这一系列操作. :class:`~acore_server.server_workflow.ServerWorkflowMixin` 实现了所有的 workflow.
 
 
+Operations
+------------------------------------------------------------------------------
+下面列出了所有的 server operations. 请查看源码中的 doc string 和源码来了解每个 operation 是做什么以及它们的具体实现.
+
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.create_ec2`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.create_rds_from_scratch`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.create_rds_from_snapshot`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.start_ec2`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.start_rds`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.associate_eip_address`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.update_db_master_password`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.stop_ec2`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.stop_rds`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.delete_ec2`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.delete_rds`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.stop_worldserver`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.create_ssh_tunnel`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.list_ssh_tunnel`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.test_ssh_tunnel`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.kill_ssh_tunnel`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.create_ec2_ami`
+- :meth:`~acore_server.server_operation_mixin.ServerOperationMixin.create_db_snapshot`
+
+
 .. _create-new-server:
 
 Workflow 1 - Create New Server
@@ -34,6 +58,10 @@ Workflow 1 - Create New Server
     - 等待 DB Instance 的状态变成 available.
     - 使用刚编译好的核心的 AMI 创建新的 EC2 Instance, 并使用 bootstrap 脚本初始化.
     - 等待 EC2 Instance 的状态变成 running, 并且游戏服务器启动成功.
+
+.. seealso::
+
+    :meth:`~acore_server.server_workflow_mixin.ServerWorkflowMixin.create_new_server` 方法的实现.
 
 
 .. _create-cloned-server:
@@ -94,6 +122,10 @@ Workflow 3 - Create Updated Server
     - 使用刚编译好的核心的 AMI 创建新的 EC2 Instance, 并使用 bootstrap 脚本初始化.
     - 等待 EC2 Instance 的状态变成 running, 并且游戏服务器启动成功.
 
+.. seealso::
+
+    :meth:`~acore_server.server_workflow_mixin.ServerWorkflowMixin.create_updated_server` 方法的实现.
+
 
 .. _stop-server:
 
@@ -117,6 +149,10 @@ Workflow 4 - Stop Server
     - 再关闭 EC2 Instance.
     - 再关闭 DB Instance.
 
+.. seealso::
+
+    :meth:`~acore_server.server_workflow_mixin.ServerWorkflowMixin.stop_server` 方法的实现.
+
 
 .. _start-server:
 
@@ -139,6 +175,10 @@ Workflow 5 - Start Server
     - 用 AWS SSM Run Command 远程 `关闭 screen session <https://github.com/MacHu-GWU/acore_server_bootstrap-project/blob/main/acore_server_bootstrap/vendor/screen_session_manager.py#L60>`_ 来关闭 worldserver 和 authserver.
     - 再关闭 EC2 Instance.
     - 再关闭 DB Instance.
+
+.. seealso::
+
+    :meth:`~acore_server.server_workflow_mixin.ServerWorkflowMixin.start_server` 方法的实现.
 
 
 .. _delete-server:

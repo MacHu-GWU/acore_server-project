@@ -15,6 +15,19 @@ x.y.z (Backlog)
 **Miscellaneous**
 
 
+1.1.1 (2024-06-22)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**Features and Improvements**
+
+- Add the following workflow:
+    - :meth:`~acore_server.server_workflow_mixin.ServerWorkflowMixin.stop_server`
+    - :meth:`~acore_server.server_workflow_mixin.ServerWorkflowMixin.start_server`
+
+**Minor Improvements**
+
+- Improve document.
+
+
 1.0.3 (2024-06-21)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 **💥Breaking Changes**

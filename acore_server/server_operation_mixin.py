@@ -458,7 +458,8 @@ class ServerOperationMixin:  # pragma: no cover
         res = ec2_inst.start_instance(ec2_client=bsm.ec2_client)
         if wait:
             _ec2_inst = ec2_inst.wait_for_running(
-                ec2_client=bsm.ec2_client, timeout=300
+                ec2_client=bsm.ec2_client,
+                timeout=300,
             )
             self.metadata.ec2_inst = _ec2_inst
         return res
@@ -510,7 +511,8 @@ class ServerOperationMixin:  # pragma: no cover
         res = rds_inst.start_db_instance(rds_client=bsm.rds_client)
         if wait:
             _rds_inst = rds_inst.wait_for_available(
-                rds_client=bsm.rds_client, timeout=900
+                rds_client=bsm.rds_client,
+                timeout=900,
             )
             self._rds_inst = _rds_inst
         return res
@@ -531,9 +533,8 @@ class ServerOperationMixin:  # pragma: no cover
         if self.config.ec2_eip_allocation_id is not None:
             self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
             if check:
-                ec2_inst = self.metadata.ensure_ec2_exists()
-            else:
-                ec2_inst = self.metadata.ec2_inst
+                self.metadata.ensure_ec2_exists()
+            ec2_inst = self.metadata.ec2_inst
             # check if this allocation id is already associated with an instance
             res = bsm.ec2_client.describe_addresses(
                 AllocationIds=[self.config.ec2_eip_allocation_id]
@@ -784,6 +785,8 @@ class ServerOperationMixin:  # pragma: no cover
         按理说我们这个库的 requirements 里没有依赖于 ``acore_server_bootstrap``,
         但是实际上依赖了. 因为我们在运行 Stop Server workflow 的过程中需要有这一步.
         所以这个函数算是例外了.
+
+        :param bsm: Boto3 Session Manager.
         """
         return ssm_better_boto.run_shell_script_async(
             ssm_client=bsm.ssm_client,
@@ -846,6 +849,10 @@ class ServerOperationMixin:  # pragma: no cover
     ):
         """
         创建一个本地的 SSH Tunnel, 用于本地数据库开发.
+
+        :param bsm: Boto3 Session Manager.
+        :param path_pem_file: EC2 的 pem 文件路径. 如果不指定, 则使用 :meth:`_get_path_pem_file`
+            的逻辑来自动获取.
         """
         if self.metadata.is_running() is False:
             raise ConnectionError(
@@ -868,6 +875,10 @@ class ServerOperationMixin:  # pragma: no cover
     ):
         """
         列出所有正在运行中的 SSH Tunnel.
+
+        :param bsm: Boto3 Session Manager.
+        :param path_pem_file: EC2 的 pem 文件路径. 如果不指定, 则使用 :meth:`_get_path_pem_file`
+            的逻辑来自动获取.
         """
         if path_pem_file is None:
             path_pem_file = self._get_path_pem_file(bsm=bsm)
@@ -893,6 +904,10 @@ class ServerOperationMixin:  # pragma: no cover
     ):
         """
         关闭所有正在运行中的 SSH Tunnel.
+
+        :param bsm: Boto3 Session Manager.
+        :param path_pem_file: EC2 的 pem 文件路径. 如果不指定, 则使用 :meth:`_get_path_pem_file`
+            的逻辑来自动获取.
         """
         if path_pem_file is None:
             path_pem_file = self._get_path_pem_file(bsm=bsm)

@@ -12,7 +12,6 @@ sub packages and modules
 
     api <api>
     constants <constants>
-    exc <exc>
     fleet <fleet>
     logger <logger>
     manager <manager>

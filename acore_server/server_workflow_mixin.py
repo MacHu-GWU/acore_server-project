@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-todo: doc string
+This module implements all "Workflow" mentioned in :ref:`operation-and-workflow`.
 """
 
 import typing as T
@@ -14,7 +14,6 @@ from s3pathlib import S3Path
 from aws_console_url.api import AWSConsole
 import simple_aws_ec2.api as simple_aws_ec2
 import simple_aws_rds.api as simple_aws_rds
-import acore_server_metadata.api as acore_server_metadata
 
 from .logger import logger
 from .utils import get_utc_now, prompt_for_confirm
@@ -135,12 +134,6 @@ class DeleteServerWorkflow(Workflow):
 
     def is_db_snapshot_created(self) -> bool:
         return self.db_snapshot_id is not None
-
-
-@dataclasses.dataclass
-class StopServerWorkflow(Workflow):
-    is_ec2_stopped: bool = dataclasses.field(default=False)
-    is_db_stopped: bool = dataclasses.field(default=False)
 
 
 class ServerWorkflowMixin:  # pragma: no cover
@@ -658,7 +651,7 @@ class ServerWorkflowMixin:  # pragma: no cover
             self.stop_worldserver(bsm=bsm)
         logger.info("Wait 10 seconds for worldserver completely shutdown ...")
         time.sleep(10)
-        logger.info(f"🗑🖥📸Stopped worldserver.")
+        logger.info(f"🔴Stopped worldserver.")
 
         # --- Shutdown EC2 and RDS
         with logger.nested():
@@ -678,11 +671,13 @@ class ServerWorkflowMixin:  # pragma: no cover
         time.sleep(3)
 
         # --- Wait EC2 and RDS to be fully stopped
-        logger.info("Wait for EC2 instance fully stopped ...")
+        logger.info("Wait for 🖥EC2 instance fully stopped ...")
         self.metadata.ec2_inst.wait_for_stopped(ec2_client=bsm.ec2_client, timeout=300)
+        logger.info(f"🔴🖥EC2 is stopped.")
 
-        logger.info("Wait for RDS instance fully stopped ...")
+        logger.info("Wait for 🛢RDS instance fully stopped ...")
         self.metadata.rds_inst.wait_for_stopped(rds_client=bsm.rds_client, timeout=900)
+        logger.info(f"🔴🛢RDS is stopped.")
 
     @logger.emoji_block(
         msg="🟢🖥🛢Start Server",
@@ -696,26 +691,29 @@ class ServerWorkflowMixin:  # pragma: no cover
         Implement :ref:`start-server`. 这个 workflow 不需要用 S3 来 track status.
         """
         # --- Start RDS
-        with logger.nested():
-            if self.metadata.rds_inst.is_ready_to_start():
+        if self.metadata.rds_inst.is_ready_to_start():
+            with logger.nested():
                 self.start_rds(bsm=bsm, wait=True)
-        logger.info("Wait RDS to be available ...")
-        self.metadata.rds_inst.wait_for_available(
-            rds_client=bsm.rds_client,
-            timeout=900,
-        )
-        logger.info("✅RDS is available.")
+        else:
+            logger.info("Wait 🛢RDS to be available ...")
+            self.metadata.rds_inst.wait_for_available(
+                rds_client=bsm.rds_client,
+                timeout=900,
+            )
+        logger.info("🟢🛢RDS is available.")
 
         # --- Start EC2
-        with logger.nested():
-            if self.metadata.ec2_inst.is_ready_to_start():
+        if self.metadata.ec2_inst.is_ready_to_start():
+            with logger.nested():
                 self.start_ec2(bsm=bsm, wait=True)
-        logger.info("Wait EC2 to be running ...")
-        self.metadata.ec2_inst.wait_for_running(
-            ec2_client=bsm.ec2_client,
-            timeout=300,
-        )
-        logger.info("✅EC2 is running.")
+        else:
+            logger.info("Wait 🖥EC2 to be running ...")
+            self.metadata.ec2_inst.wait_for_running(
+                ec2_client=bsm.ec2_client,
+                timeout=300,
+            )
+        logger.info("🟢🖥EC2 is running.")
+
         logger.info(
             "🚀EC2 may take 30 seconds to make the worldserver fully ready. "
             "Consider using ``acore_server_bootstrap.api.Remoter.list_session`` "

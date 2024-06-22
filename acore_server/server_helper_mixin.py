@@ -17,7 +17,6 @@ except ImportError:
 
 from .logger import logger
 
-aws_console = AWSConsole(aws_region="us-east-1")
 
 if T.TYPE_CHECKING:  # pragma: no cover
     from .server import Server
@@ -55,7 +54,9 @@ class ServerHelperMixin:  # pragma: no cover
     )
     def show_aws_link(
         self: "Server",
+        bsm: "BotoSesManager"
     ):
+        aws_console = AWSConsole.from_bsm(bsm=bsm)
         if self.metadata.is_ec2_exists():
             url = aws_console.ec2.get_instance(self.metadata.ec2_inst.id)
             logger.info(f"🌐🖥preview EC2: {url}")

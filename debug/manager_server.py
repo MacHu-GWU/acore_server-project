@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
 
+"""
+这个脚本是用来对单台服务器进行管理的脚本. 可以方便的执行
+`server operation 或是 workflow <https://acore-server.readthedocs.io/en/latest/search.html?q=Operation+and+Workflow&check_keywords=yes&area=default>`_
+"""
+
 from acore_server.api import Manager
 
 
@@ -11,6 +16,7 @@ server = manager.blue
 
 # server.show_server_config()
 # server.show_server_status()
+# server.show_aws_link(bsm=manager.bsm)
 
 # server.associate_eip_address(bsm=manager.bsm, allow_reassociation=True)
 # server.update_db_master_password(bsm=manager.bsm)
@@ -19,7 +25,6 @@ server = manager.blue
 # server.list_ssh_tunnel(bsm=manager.bsm)
 # server.kill_ssh_tunnel(bsm=manager.bsm)
 # server.test_ssh_tunnel()
-
 
 # ------------------------------------------------------------------------------
 # Create Cloned Server
@@ -82,4 +87,4 @@ server = manager.blue
 # ------------------------------------------------------------------------------
 # Start Server
 # ------------------------------------------------------------------------------
-server.start_server(bsm=manager.bsm)
+# server.start_server(bsm=manager.bsm)
