@@ -83,13 +83,19 @@ class ServerOperationMixin:  # pragma: no cover
 
     def build_bootstrap_command(
         self: "Server",
-        python_version: str = "3.8",
+        python_version: str = "3",
         acore_soap_app_version: T.Optional[str] = None,
         acore_db_app_version: T.Optional[str] = None,
         acore_server_bootstrap_version: T.Optional[str] = None,
     ) -> str:
         """
-        构建需要在 EC2 服务器上运行的 bootstrap 命令.
+        构建需要在 EC2 服务器上运行的 bootstrap 命令. 如果没有指定版本号, 则使用 config 中的版本号.
+        如果 config 中也没有版本号, 那么就使用 main branch 上的最新版本.
+
+        :param python_version: pyenv 中的 Python 版本号. 可以是 3, 3.8, 3.9 等.
+        :param acore_soap_app_version: `acore_soap_app <https://github.com/MacHu-GWU/acore_soap_app-project/releases>`_ 库的版本.
+        :param acore_db_app_version: `acore_db_app <https://github.com/MacHu-GWU/acore_db_app-project/releases>`_ 库的版本.
+        :param acore_server_bootstrap_version: `acore_server_bootstrap <https://github.com/MacHu-GWU/acore_server_bootstrap-project/releases>`_ 库的版本.
         """
         script_url = "https://raw.githubusercontent.com/MacHu-GWU/acore_server_bootstrap-project/main/install.py"
         main_part = (
@@ -98,15 +104,31 @@ class ServerOperationMixin:  # pragma: no cover
         )
         parts = [main_part]
         if acore_soap_app_version:
-            parts.append(
-                f"--acore_soap_app_version {self.config.acore_soap_app_version}"
-            )
+            parts.append(f"--acore_soap_app_version {acore_soap_app_version}")
+        else:
+            if self.config.acore_soap_app_version:
+                parts.append(
+                    f"--acore_soap_app_version {self.config.acore_soap_app_version}"
+                )
+
         if acore_db_app_version:
-            parts.append(f"--acore_db_app_version {self.config.acore_db_app_version}")
+            parts.append(f"--acore_db_app_version {acore_db_app_version}")
+        else:
+            if self.config.acore_db_app_version:
+                parts.append(
+                    f"--acore_db_app_version {self.config.acore_db_app_version}"
+                )
+
         if acore_server_bootstrap_version:
             parts.append(
-                f"--acore_server_bootstrap_version {self.config.acore_server_bootstrap_version}"
+                f"--acore_server_bootstrap_version {acore_server_bootstrap_version}"
             )
+        else:
+            if self.config.acore_server_bootstrap_version:
+                parts.append(
+                    f"--acore_server_bootstrap_version {self.config.acore_server_bootstrap_version}"
+                )
+
         cmd = " ".join(parts)
         return cmd
 
