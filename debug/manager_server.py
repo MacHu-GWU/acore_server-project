@@ -12,35 +12,8 @@ server = manager.blue
 # server.show_server_config()
 # server.show_server_status()
 
-# server.run_rds(bsm=bsm, stack_exports=stack_exports)
-# server.run_ec2(
-#     bsm=bsm,
-#     stack_exports=stack_exports,
-#     acore_soap_app_version="0.3.4",
-#     acore_db_app_version="0.2.2",
-#     acore_server_bootstrap_version="0.4.1",
-# )
-
-# server.start_ec2(bsm=bsm)
-# server.start_rds(bsm=bsm)
-
-# server.associate_eip_address(bsm=bsm
-# server.update_db_master_password(bsm=bsm)
-# server.bootstrap(bsm=bsm, acore_soap_app_version="0.3.2", acore_server_bootstrap_version="0.3.1")
-
-# print(server.wow_status)
-
-# server.stop_ec2(bsm=bsm)
-# server.stop_rds(bsm=bsm)
-
-# server.delete_ec2(bsm=bsm)
-# server.delete_rds(bsm=bsm)
-
-# server.run_check_server_status_cron_job(bsm=bsm)
-# server.stop_check_server_status_cron_job(bsm=bsm)
-
-# server.run_server(bsm=bsm)
-# server.stop_server(bsm=bsm)
+# server.associate_eip_address(bsm=manager.bsm, allow_reassociation=True)
+# server.update_db_master_password(bsm=manager.bsm)
 
 # server.create_ssh_tunnel(bsm=manager.bsm)
 # server.list_ssh_tunnel(bsm=manager.bsm)
@@ -65,10 +38,11 @@ server = manager.blue
 #     delete_snapshot_afterwards=True,
 # )
 
+
 # ------------------------------------------------------------------------------
 # Create Updated Server
 # ------------------------------------------------------------------------------
-# workflow_id = "create_cloned_server-2024-06-20-23-11-00"
+# workflow_id = "create_cloned_server-2024-06-21-07-42-00"
 # server.create_updated_server(
 #     bsm=manager.bsm,
 #     workflow_id=workflow_id,
@@ -81,6 +55,7 @@ server = manager.blue
 #     snapshot_id="rds:sbx-green-2024-06-19-04-50",
 #     delete_snapshot_afterwards=False,
 # )
+
 
 # ------------------------------------------------------------------------------
 # Delete Server
@@ -96,3 +71,15 @@ server = manager.blue
 #     create_backup_ec2_ami=False,
 #     create_backup_db_snapshot=False,
 # )
+
+
+# ------------------------------------------------------------------------------
+# Stop Server
+# ------------------------------------------------------------------------------
+# server.stop_server(bsm=manager.bsm)
+
+
+# ------------------------------------------------------------------------------
+# Start Server
+# ------------------------------------------------------------------------------
+server.start_server(bsm=manager.bsm)

@@ -7,17 +7,15 @@ todo: doc string
 import typing as T
 import dataclasses
 import json
-from datetime import datetime, timezone
+import time
 
 from boto_session_manager import BotoSesManager
 from s3pathlib import S3Path
 from aws_console_url.api import AWSConsole
 import simple_aws_ec2.api as simple_aws_ec2
 import simple_aws_rds.api as simple_aws_rds
-from .exc import (
-    FailedToStartServerError,
-    FailedToStopServerError,
-)
+import acore_server_metadata.api as acore_server_metadata
+
 from .logger import logger
 from .utils import get_utc_now, prompt_for_confirm
 from .wserver_infra_exports import StackExports
@@ -56,6 +54,18 @@ class Workflow:
                     f"workflow_id mismatch: {workflow.workflow_id} != {workflow_id}"
                 )
         return workflow
+
+
+@dataclasses.dataclass
+class CreateNewServerWorkflow(Workflow):
+    ec2_inst_id: T.Optional[str] = dataclasses.field(default=None)
+    db_inst_id: T.Optional[str] = dataclasses.field(default=None)
+
+    def is_ec2_instance_created(self) -> bool:
+        return self.ec2_inst_id is not None
+
+    def is_db_instance_created(self) -> bool:
+        return self.db_inst_id is not None
 
 
 @dataclasses.dataclass
@@ -127,21 +137,81 @@ class DeleteServerWorkflow(Workflow):
         return self.db_snapshot_id is not None
 
 
+@dataclasses.dataclass
+class StopServerWorkflow(Workflow):
+    is_ec2_stopped: bool = dataclasses.field(default=False)
+    is_db_stopped: bool = dataclasses.field(default=False)
+
+
 class ServerWorkflowMixin:  # pragma: no cover
     """
     Server Workflow Mixin class that contains all the server workflow methods.
     """
 
-    def ensure_server_is_ready_for_clone(
+    @logger.emoji_block(
+        msg="🆕🖥🛢Create Updated Server",
+        emoji="🆕",
+    )
+    def create_new_server(
         self: "Server",
         bsm: "BotoSesManager",
-    ) -> T.Tuple[simple_aws_ec2.Ec2Instance, simple_aws_rds.RDSDBInstance]:
-        ec2_inst = self.ensure_rds_exists(bsm=bsm)
-        if self.metadata.is_rds_running() is False:
-            raise FailedToStartServerError(
-                f"RDS DB instance {self.id!r} is not running, so we cannot create DB snapshot then clone the server!"
-            )
-        return ec2_inst, self.metadata.rds_inst
+        workflow_id: str,
+        s3path_workflow: S3Path,
+        ami_id: str,
+        stack_exports: "StackExports",
+    ):
+        """
+        Implement :ref:`create-new-server`.
+
+        :param ami_id: the AMI ID to create the new EC2 instance.
+        """
+        aws_console = AWSConsole.from_bsm(bsm=bsm)
+        workflow = CreateNewServerWorkflow.load(
+            bsm=bsm,
+            s3_path=s3path_workflow,
+            workflow_id=workflow_id,
+        )
+
+        logger.info("Check new server configurations ...")
+        if self.config.is_ready_for_create_new_server() is False:
+            raise ValueError("server config is not ready for create cloned server")
+        logger.info("✅ new server configuration is fine.")
+
+        # --- create RDS
+        if workflow.is_db_instance_created() is False:
+            with logger.nested():
+                res = self.create_rds_from_scratch(
+                    bsm=bsm,
+                    stack_exports=stack_exports,
+                    check=True,
+                    wait=True,
+                )
+                db_inst_id = res["DBInstance"]["DBInstanceIdentifier"]
+
+            url = aws_console.rds.get_database_instance(db_inst_id)
+            logger.info(f"🆕🛢Created DB Instance {db_inst_id!r}, preview at {url}")
+            workflow.db_inst_id = db_inst_id
+            workflow.dump(bsm=bsm, s3_path=s3path_workflow)
+        else:
+            logger.info("Skip creating DB instance, DB is already created.")
+
+        # --- create EC2
+        if workflow.is_ec2_instance_created() is False:
+            with logger.nested():
+                res = self.create_ec2(
+                    bsm=bsm,
+                    stack_exports=stack_exports,
+                    ami_id=ami_id,
+                    check=True,
+                    wait=True,
+                )
+                ec2_inst_id = res["Instances"][0]["InstanceId"]
+            url = aws_console.ec2.get_instance(ec2_inst_id)
+            logger.info(f"🆕🖥Created EC2 instance {ec2_inst_id!r}, preview at {url}")
+            workflow.ec2_inst_id = ec2_inst_id
+            workflow.dump(bsm=bsm, s3_path=s3path_workflow)
+        else:
+            logger.info("Skip creating EC2 instance, EC2 is already created.")
 
     @logger.emoji_block(
         msg="🧬🖥🛢Create Cloned Server",
@@ -162,6 +232,11 @@ class ServerWorkflowMixin:  # pragma: no cover
         """
         Implement :ref:`create-cloned-server`.
         """
+        # --- make sure old server exists
+        self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
+        self.metadata.ensure_ec2_exists()
+        self.metadata.ensure_rds_exists()
+
         aws_console = AWSConsole.from_bsm(bsm=bsm)
         workflow = CreateClonedServerWorkflow.load(
             bsm=bsm, s3_path=s3path_workflow, workflow_id=workflow_id
@@ -188,13 +263,13 @@ class ServerWorkflowMixin:  # pragma: no cover
 
         if workflow.is_ec2_ami_created() is False:
             with logger.nested():
-                self.ensure_ec2_exists(bsm=bsm)
                 ami_name = self._get_ec2_ami_name(utc_now=utc_now)
                 res = self.create_ec2_ami(
                     bsm=bsm,
                     ami_name=ami_name,
                     skip_reboot=skip_reboot,
                     wait=False,
+                    check=True,
                 )
                 ami_id = res["ImageId"]
             url = aws_console.ec2.get_ami(ami_id)
@@ -206,11 +281,15 @@ class ServerWorkflowMixin:  # pragma: no cover
 
         if workflow.is_db_snapshot_created() is False:
             with logger.nested():
-                # todo, if the RDS is not running, run it, then create snapshot, then stop it at the end
+                # todo, if the RDS is not running, run it, then create snapshot, then stop it at the end.
+                # todo, I need to thinks about if it is a valid feature
                 snapshot_id = self._get_db_snapshot_id(utc_now=utc_now)
-                self.ensure_rds_exists(bsm=bsm)
                 res = self.create_db_snapshot(
-                    bsm=bsm, snapshot_id=snapshot_id, wait=False
+                    bsm=bsm,
+                    snapshot_id=snapshot_id,
+                    wait=False,
+                    check=True,
+                    auto_resolve=True,
                 )
                 snapshot_id = res["DBSnapshot"]["DBSnapshotIdentifier"]
             url = aws_console.rds.get_snapshot(snapshot_id)
@@ -224,12 +303,11 @@ class ServerWorkflowMixin:  # pragma: no cover
         if workflow.is_db_instance_created() is False:
             logger.info("wait for DB Snapshot to be available ...")
             snapshot = simple_aws_rds.RDSDBSnapshot(
-                db_snapshot_identifier=workflow.db_snapshot_id
+                db_snapshot_identifier=workflow.db_snapshot_id,
             )
             snapshot.wait_for_available(rds_client=bsm.rds_client)
 
             with logger.nested():
-                new_server.ensure_rds_not_exists(bsm=bsm)
                 res = new_server.create_rds_from_snapshot(
                     bsm=bsm,
                     stack_exports=stack_exports,
@@ -253,7 +331,6 @@ class ServerWorkflowMixin:  # pragma: no cover
             image.wait_for_available(ec2_client=bsm.ec2_client)
 
             with logger.nested():
-                new_server.ensure_ec2_not_exists(bsm=bsm)
                 res = new_server.create_ec2(
                     bsm=bsm,
                     stack_exports=stack_exports,
@@ -324,6 +401,11 @@ class ServerWorkflowMixin:  # pragma: no cover
             the db instant not exists, then raise error immediately; if provided
             use the given snapshot_id to create the db instance.
         """
+        # --- make sure old server exists
+        self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
+        self.metadata.ensure_ec2_exists()
+        self.metadata.ensure_rds_exists()
+
         aws_console = AWSConsole.from_bsm(bsm=bsm)
         workflow = CreateUpdatedServerWorkflow.load(
             bsm=bsm,
@@ -352,10 +434,14 @@ class ServerWorkflowMixin:  # pragma: no cover
         if workflow.is_db_snapshot_created() is False:
             with logger.nested():
                 snapshot_id = self._get_db_snapshot_id(utc_now=utc_now)
-                # todo: if the RDS is not running, run it, then create snapshot, then stop it at the end
-                self.ensure_rds_exists(bsm=bsm)
+                # todo, if the RDS is not running, run it, then create snapshot, then stop it at the end.
+                # todo, I need to thinks about if it is a valid feature
                 res = self.create_db_snapshot(
-                    bsm=bsm, snapshot_id=snapshot_id, wait=False
+                    bsm=bsm,
+                    snapshot_id=snapshot_id,
+                    wait=False,
+                    check=True,
+                    auto_resolve=True,
                 )
                 snapshot_id = res["DBSnapshot"]["DBSnapshotIdentifier"]
             url = aws_console.rds.get_snapshot(snapshot_id)
@@ -374,7 +460,6 @@ class ServerWorkflowMixin:  # pragma: no cover
             snapshot.wait_for_available(rds_client=bsm.rds_client)
 
             with logger.nested():
-                new_server.ensure_rds_not_exists(bsm=bsm)
                 res = new_server.create_rds_from_snapshot(
                     bsm=bsm,
                     stack_exports=stack_exports,
@@ -394,7 +479,6 @@ class ServerWorkflowMixin:  # pragma: no cover
         # --- create EC2
         if workflow.is_ec2_instance_created() is False:
             with logger.nested():
-                new_server.ensure_ec2_not_exists(bsm=bsm)
                 res = new_server.create_ec2(
                     bsm=bsm,
                     stack_exports=stack_exports,
@@ -443,7 +527,9 @@ class ServerWorkflowMixin:  # pragma: no cover
         """
         aws_console = AWSConsole.from_bsm(bsm=bsm)
         workflow = DeleteServerWorkflow.load(
-            bsm=bsm, s3_path=s3path_workflow, workflow_id=workflow_id
+            bsm=bsm,
+            s3_path=s3path_workflow,
+            workflow_id=workflow_id,
         )
         logger.info(f"Delete {self.id!r}")
         if skip_prompt is False:
@@ -464,6 +550,7 @@ class ServerWorkflowMixin:  # pragma: no cover
                         ami_name=ami_name,
                         skip_reboot=skip_reboot,
                         wait=False,
+                        check=True,
                     )
                     ami_id = res["ImageId"]
                 url = aws_console.ec2.get_ami(ami_id)
@@ -484,6 +571,7 @@ class ServerWorkflowMixin:  # pragma: no cover
                         bsm=bsm,
                         snapshot_id=snapshot_id,
                         wait=False,
+                        check=True,
                     )
                     snapshot_id = res["DBSnapshot"]["DBSnapshotIdentifier"]
                 url = aws_console.rds.get_snapshot(snapshot_id)
@@ -539,7 +627,7 @@ class ServerWorkflowMixin:  # pragma: no cover
                 with logger.nested():
                     res = self.delete_rds(
                         bsm=bsm,
-                        create_final_snapshot=False,
+                        create_final_snapshot=False,  # we already manually create one
                         check=False,
                     )
                     db_inst_id = self.metadata.rds_inst.id
@@ -551,3 +639,86 @@ class ServerWorkflowMixin:  # pragma: no cover
             workflow.dump(bsm=bsm, s3_path=s3path_workflow)
         else:
             logger.info("Skip delete DB instance, DB is already deleted.")
+
+    @logger.emoji_block(
+        msg="🔴🖥🛢Stop Server",
+        emoji="🔴",
+    )
+    def stop_server(
+        self: "Server",
+        bsm: "BotoSesManager",
+    ):
+        """
+        Implement :ref:`stop-server`. 这个 workflow 不需要用 S3 来 track status.
+        """
+        # --- Stop worldserver
+        # 注意, 每次执行这个 workflow 的时候我们都尝试关闭 worldserver 并等待 10 秒
+        # 确保服务器不会丢数据
+        with logger.nested():
+            self.stop_worldserver(bsm=bsm)
+        logger.info("Wait 10 seconds for worldserver completely shutdown ...")
+        time.sleep(10)
+        logger.info(f"🗑🖥📸Stopped worldserver.")
+
+        # --- Shutdown EC2 and RDS
+        with logger.nested():
+            if self.metadata.ec2_inst.is_ready_to_stop():
+                self.stop_ec2(bsm=bsm, wait=False, auto_resolve=True)
+            else:
+                logger.info("Skip stop EC2, it is already stopped.")
+        logger.info("Wait 3 seconds for stopping EC2 instance ...")
+        time.sleep(3)
+
+        with logger.nested():
+            if self.metadata.rds_inst.is_ready_to_stop():
+                self.stop_rds(bsm=bsm, wait=False, auto_resolve=True)
+            else:
+                logger.info("Skip stop RDS, it is already stopped.")
+        logger.info("Wait 3 seconds for stopping RDS instance ...")
+        time.sleep(3)
+
+        # --- Wait EC2 and RDS to be fully stopped
+        logger.info("Wait for EC2 instance fully stopped ...")
+        self.metadata.ec2_inst.wait_for_stopped(ec2_client=bsm.ec2_client, timeout=300)
+
+        logger.info("Wait for RDS instance fully stopped ...")
+        self.metadata.rds_inst.wait_for_stopped(rds_client=bsm.rds_client, timeout=900)
+
+    @logger.emoji_block(
+        msg="🟢🖥🛢Start Server",
+        emoji="🟢",
+    )
+    def start_server(
+        self: "Server",
+        bsm: "BotoSesManager",
+    ):
+        """
+        Implement :ref:`start-server`. 这个 workflow 不需要用 S3 来 track status.
+        """
+        # --- Start RDS
+        with logger.nested():
+            if self.metadata.rds_inst.is_ready_to_start():
+                self.start_rds(bsm=bsm, wait=True)
+        logger.info("Wait RDS to be available ...")
+        self.metadata.rds_inst.wait_for_available(
+            rds_client=bsm.rds_client,
+            timeout=900,
+        )
+        logger.info("✅RDS is available.")
+
+        # --- Start EC2
+        with logger.nested():
+            if self.metadata.ec2_inst.is_ready_to_start():
+                self.start_ec2(bsm=bsm, wait=True)
+        logger.info("Wait EC2 to be running ...")
+        self.metadata.ec2_inst.wait_for_running(
+            ec2_client=bsm.ec2_client,
+            timeout=300,
+        )
+        logger.info("✅EC2 is running.")
+        logger.info(
+            "🚀EC2 may take 30 seconds to make the worldserver fully ready. "
+            "Consider using ``acore_server_bootstrap.api.Remoter.list_session`` "
+            "method to verify the status of the worldserver. "
+            "You can find more information at https://acore-server-bootstrap.readthedocs.io/en/latest/acore_server_bootstrap/remoter.html#acore_server_bootstrap.remoter.Remoter.list_session"
+        )

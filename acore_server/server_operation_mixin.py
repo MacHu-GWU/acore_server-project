@@ -345,7 +345,6 @@ class ServerOperationMixin:  # pragma: no cover
         """
         为服务器创建一台新的数据库.
 
-
         :param bsm: Boto3 Session Manager.
         :param stack_exports: cloudformation stack exports object that contains
             AWS infrastructure information.
