@@ -47,6 +47,8 @@ class ServerHelperMixin:  # pragma: no cover
         logger.info(f"🛢is_rds_exists: {self.metadata.is_rds_exists()}")
         logger.info(f"🖥is_ec2_running: {self.metadata.is_ec2_running()}")
         logger.info(f"🛢is_rds_running: {self.metadata.is_rds_running()}")
+        if self.metadata.is_ec2_running():
+            logger.info(f"🖥public_ip: {self.metadata.ec2_inst.public_ip}")
 
     @logger.emoji_block(
         msg="🔍🛠Show server config",
