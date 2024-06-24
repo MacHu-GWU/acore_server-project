@@ -647,26 +647,29 @@ class ServerWorkflowMixin:  # pragma: no cover
         # --- Stop worldserver
         # 注意, 每次执行这个 workflow 的时候我们都尝试关闭 worldserver 并等待 10 秒
         # 确保服务器不会丢数据
-        with logger.nested():
-            self.stop_worldserver(bsm=bsm)
-        logger.info("Wait 10 seconds for worldserver completely shutdown ...")
-        time.sleep(10)
-        logger.info(f"🔴Stopped worldserver.")
+        if self.metadata.is_ec2_running() is True:
+            with logger.nested():
+                self.stop_worldserver(bsm=bsm)
+            logger.info("Wait 10 seconds for worldserver completely shutdown ...")
+            time.sleep(10)
+            logger.info(f"🔴Stopped worldserver.")
+        else:
+            logger.info("EC2 is not running, skip stop worldserver.")
 
         # --- Shutdown EC2 and RDS
-        with logger.nested():
-            if self.metadata.ec2_inst.is_ready_to_stop():
+        if self.metadata.ec2_inst.is_ready_to_stop():
+            with logger.nested():
                 self.stop_ec2(bsm=bsm, wait=False, auto_resolve=True)
-            else:
-                logger.info("Skip stop EC2, it is already stopped.")
+        else:
+            logger.info("Skip stop EC2, it is already stopped.")
         logger.info("Wait 3 seconds for stopping EC2 instance ...")
         time.sleep(3)
 
-        with logger.nested():
-            if self.metadata.rds_inst.is_ready_to_stop():
+        if self.metadata.rds_inst.is_ready_to_stop():
+            with logger.nested():
                 self.stop_rds(bsm=bsm, wait=False, auto_resolve=True)
-            else:
-                logger.info("Skip stop RDS, it is already stopped.")
+        else:
+            logger.info("Skip stop RDS, it is already stopped.")
         logger.info("Wait 3 seconds for stopping RDS instance ...")
         time.sleep(3)
 
