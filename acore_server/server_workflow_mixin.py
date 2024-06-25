@@ -229,6 +229,10 @@ class ServerWorkflowMixin:  # pragma: no cover
         self.metadata.refresh(ec2_client=bsm.ec2_client, rds_client=bsm.rds_client)
         self.metadata.ensure_ec2_exists()
         self.metadata.ensure_rds_exists()
+        # we need RDS to be available to create snapshot
+        if self.metadata.is_rds_running() is False:
+            logger.info("RDS is not running, try to wait it to be available then we can create snapshot ...")
+            self.metadata.rds_inst.wait_for_available(rds_client=bsm.rds_client, timeout=900)
 
         aws_console = AWSConsole.from_bsm(bsm=bsm)
         workflow = CreateClonedServerWorkflow.load(

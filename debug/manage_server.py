@@ -11,7 +11,8 @@ from acore_server.api import Manager
 # ------------------------------------------------------------------------------
 # PLEASE DOUBLE CHECK TO MAKE SURE YOU ARE WORKING ON THE RIGHT SERVER
 # ------------------------------------------------------------------------------
-manager = Manager(aws_profile="bmt_app_dev_us_east_1", env_name="sbx")
+env_name = "sbx"
+manager = Manager(aws_profile="bmt_app_dev_us_east_1", env_name=env_name)
 server = manager.blue
 
 # server.show_server_config()

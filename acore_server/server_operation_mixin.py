@@ -940,9 +940,8 @@ class ServerOperationMixin:  # pragma: no cover
         if ami_name is None:
             ami_name = self._get_ec2_ami_name(utc_now)
         if check:
-            ec2_inst = self.metadata.ensure_ec2_exists()
-        else:
-            ec2_inst = self.metadata.ec2_inst
+            self.metadata.ensure_ec2_exists()
+        ec2_inst = self.metadata.ec2_inst
         logger.info(
             f"create image {ami_name!r} from ec2 instance {self.metadata.ec2_inst.id}"
         )
