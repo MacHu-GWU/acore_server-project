@@ -30,25 +30,25 @@ server = manager.blue
 # ------------------------------------------------------------------------------
 # Create Cloned Server
 # ------------------------------------------------------------------------------
-# workflow_id = "create_cloned_server-2024-06-19-04-27-00"
+# workflow_id = "create_cloned_server-2024-07-26-15-24-00"
 # server.create_cloned_server(
 #     bsm=manager.bsm,
 #     workflow_id=workflow_id,
 #     s3path_workflow=manager.s3dir_env_workflow.joinpath(
 #         server.server_name, f"{workflow_id}.json"
 #     ),
-#     new_server_id="sbx-blue",
+#     new_server_id="sbx-black",
 #     stack_exports=manager.stack_exports,
 #     skip_reboot=True,
-#     delete_ami_afterwards=True,
-#     delete_snapshot_afterwards=True,
+#     delete_ami_afterwards=False,
+#     delete_snapshot_afterwards=False,
 # )
 
 
 # ------------------------------------------------------------------------------
 # Create Updated Server
 # ------------------------------------------------------------------------------
-# workflow_id = "create_cloned_server-2024-06-21-07-42-00"
+# workflow_id = "create_updated_server-2024-07-26-15-24-00"
 # server.create_updated_server(
 #     bsm=manager.bsm,
 #     workflow_id=workflow_id,
@@ -56,9 +56,9 @@ server = manager.blue
 #         server.env_name, f"{workflow_id}.json"
 #     ),
 #     new_server_id="sbx-blue",
-#     ami_id="ami-0452e5248cdce53f2",
+#     ami_id="ami-0168d2b22c6ff633e",
 #     stack_exports=manager.stack_exports,
-#     snapshot_id="rds:sbx-green-2024-06-19-04-50",
+#     snapshot_id="sbx-blue-snapshot-final-2024-07-26",
 #     delete_snapshot_afterwards=False,
 # )
 
